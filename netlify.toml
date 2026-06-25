@@ -1,7 +1,7 @@
 # Untapped KPI Tracker — Netlify config
 [build]
   publish = "."
-  functions = "."
+  functions = "netlify/functions"
 
 [[redirects]]
   from = "/api/tracker"
