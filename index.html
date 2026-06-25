@@ -393,6 +393,16 @@ const App={
   savePulse:async()=>{const wk=weekKey(new Date());const note=$('#pnote').value;const j=await api('savePulse',{candidateId:ME.id,weekKey:wk,workload:pulseDraft.workload,confidence:pulseDraft.confidence,supported:pulseDraft.supported,note});if(j.ok){ME.pulse=ME.pulse||{};ME.pulse[wk]={...pulseDraft,note};$('#pok').textContent='Saved ✓';}},
   raiseBlocker:async()=>{const t=$('#bnew').value.trim();if(!t)return;const j=await api('addBlocker',{candidateId:ME.id,text:t});if(j.ok){await refresh();renderKBody();toast('Blocker raised');}},
 };
+/* live auto-refresh for the customer dashboard (every 30s, paused when tab hidden or editing) */
+async function autoTick(){
+  if(role!=='customer'||document.hidden) return;
+  const ae=document.activeElement;
+  if(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return; // don't clobber typing
+  if(cTab==='kpis'||cTab==='kudos') return;                    // don't disturb editing views
+  if(await refresh() && role==='customer'){ renderRoster(); renderDetail(); }
+}
+setInterval(autoTick,30000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) autoTick(); });
 init();
 </script>
 </body>
