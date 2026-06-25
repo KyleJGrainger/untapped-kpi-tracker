@@ -1,0 +1,13 @@
+# Untapped KPI Tracker — Netlify config
+[build]
+  publish = "."
+  functions = "."
+
+[[redirects]]
+  from = "/api/tracker"
+  to = "/.netlify/functions/tracker"
+  status = 200
+
+# Weekly digest — Fridays 14:00 UTC
+[functions."digest"]
+  schedule = "0 14 * * 5"

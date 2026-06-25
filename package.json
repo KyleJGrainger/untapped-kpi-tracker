@@ -1,0 +1,9 @@
+{
+  "name": "untapped-kpi-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Untapped cloud KPI tracker — customer workspace, candidate logging, dashboard, weekly digest.",
+  "dependencies": {
+    "@netlify/blobs": "^8.2.0"
+  }
+}
