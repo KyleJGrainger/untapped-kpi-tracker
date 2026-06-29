@@ -8,6 +8,10 @@
   to = "/.netlify/functions/tracker"
   status = 200
 
-# Weekly digest — Fridays 14:00 UTC
+# Weekly digest — Fridays 14:00 UTC. Adjust the cron as you like.
 [functions."digest"]
   schedule = "0 14 * * 5"
+
+# Commission reminders — 15th (reminder), 18th (final), 19th (summary to Untapped). 09:00 UTC.
+[functions."commissions"]
+  schedule = "0 9 15,18,19 * *"

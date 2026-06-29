@@ -122,9 +122,30 @@ function ragText(p){return p==null?'No data':p>=75?'On track':p>=50?'Watch':'At 
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1600);}
 const uid=()=>Math.random().toString(36).slice(2,8);
 
+/* time off: 2026 public holidays (excluded from allowance) + day maths */
+const HOLIDAYS={
+ 'South Africa':{'2026-01-01':"New Year's Day",'2026-03-21':'Human Rights Day','2026-04-03':'Good Friday','2026-04-06':'Family Day','2026-04-27':'Freedom Day','2026-05-01':"Workers' Day",'2026-06-16':'Youth Day','2026-08-10':"National Women's Day (observed)",'2026-09-24':'Heritage Day','2026-12-16':'Day of Reconciliation','2026-12-25':'Christmas Day','2026-12-26':'Day of Goodwill'},
+ 'Philippines':{'2026-01-01':"New Year's Day",'2026-02-17':'Chinese New Year','2026-04-02':'Maundy Thursday','2026-04-03':'Good Friday','2026-04-04':'Black Saturday','2026-04-09':'Araw ng Kagitingan','2026-05-01':'Labor Day','2026-06-12':'Independence Day','2026-08-21':'Ninoy Aquino Day','2026-08-31':'National Heroes Day','2026-11-01':"All Saints' Day",'2026-11-30':'Bonifacio Day','2026-12-08':'Immaculate Conception','2026-12-25':'Christmas Day','2026-12-30':'Rizal Day','2026-12-31':'Last Day of the Year'}
+};
+function isoDate(d){return d.toISOString().slice(0,10);}
+function workDays(start,end,loc){
+ if(!start||!end)return{days:0,skipped:[]};
+ const s=new Date(start+'T00:00:00Z'),e=new Date(end+'T00:00:00Z');
+ if(isNaN(s)||isNaN(e))return{days:0,skipped:[]};
+ if(e<s)return{days:0,skipped:[],invalid:true};
+ let days=0;const skipped=[];
+ for(let d=new Date(s);d<=e;d.setUTCDate(d.getUTCDate()+1)){const wd=d.getUTCDay();if(wd===0||wd===6)continue;const h=HOLIDAYS[loc]&&HOLIDAYS[loc][isoDate(d)];if(h){skipped.push(h);continue;}days++;}
+ return{days,skipped};
+}
+function toBooked(c){return (c.timeoff||[]).filter(r=>r.status==='approved').reduce((t,r)=>t+workDays(r.start,r.end,c.location).days,0);}
+function toPending(c){return (c.timeoff||[]).filter(r=>r.status==='pending').reduce((t,r)=>t+workDays(r.start,r.end,c.location).days,0);}
+function fmtD(s){return new Date(s+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}
+function balRow(c){const a=c.allowance||0,b=toBooked(c),p=toPending(c),r=a-b;return '<div style="display:flex;gap:26px;flex-wrap:wrap;margin:6px 0 8px">'+[['Allowance',a,''],['Booked',b,''],['Pending',p,''],['Remaining',r,'color:#FFC600']].map(x=>'<div><div style="font-family:Georgia,serif;font-size:26px;line-height:1;'+x[2]+'">'+x[1]+'</div><div class="lab" style="margin-top:4px">'+x[0]+'</div></div>').join('')+'</div>';}
+function toReqRows(c,forClient){const list=c.timeoff||[];if(!list.length)return '<div class="empty">No requests yet.</div>';return list.map(r=>{const calc=workDays(r.start,r.end,c.location);let act='';if(forClient&&r.status==='pending')act='<button class="btn sm" style="background:#34c759;color:#04210e" onclick="App.decideTO(\''+c.id+'\',\''+r.id+'\',\'approved\')">Approve</button> <button class="btn ghost sm" onclick="App.decideTO(\''+c.id+'\',\''+r.id+'\',\'declined\')">Decline</button>';else if(!forClient&&r.status==='pending')act='<button class="btn ghost sm" onclick="App.cancelTO(\''+r.id+'\')">Cancel</button>';else act='<span class="badge '+(r.status==='approved'?'':'open')+'">'+r.status+'</span>';return '<div class="item"><div class="row" style="justify-content:space-between;align-items:center"><div><b>'+fmtD(r.start)+' → '+fmtD(r.end)+'</b> <span class="muted">· '+calc.days+' day'+(calc.days===1?'':'s')+'</span>'+(r.reason?'<div class="muted" style="font-size:13px">'+esc(r.reason)+'</div>':'')+(calc.skipped.length?'<div class="muted" style="font-size:12px">'+calc.skipped.length+' public holiday not counted</div>':'')+'</div><div>'+act+'</div></div></div>';}).join('');}
+
 /* session + api */
 let wsId=null, pin=null, role=null, WS=null, ME=null, company='';
-let activeId=null, tab='daily', cTab='dash';
+let activeId=null, tab='daily', cTab='dash', cView='dashboard';
 let cursor={daily:today(),weekly:weekKey(new Date()),monthly:monthKey(new Date())};
 function saveSession(){try{localStorage.setItem('untapped_kpi_session',JSON.stringify({wsId,pin}))}catch(e){}}
 function clearSession(){try{localStorage.removeItem('untapped_kpi_session')}catch(e){}}
@@ -152,6 +173,7 @@ async function init(){
   if(wsId) unlock(); else landing();
 }
 function route(){
+  try{ if(wsId) history.replaceState(null,'',location.pathname+'?w='+wsId); }catch(e){} // keep recoverable link in the address bar
   who.innerHTML=`<span>${role==='customer'?esc(WS.company||'Customer'):esc(company)} · ${role==='customer'?'Customer':'Candidate'}</span><button class="lock" onclick="App.lock()">Lock</button>`;
   if(role==='customer') customerApp(); else candidateApp();
 }
@@ -224,13 +246,46 @@ function unlock(){
 
 /* ---------- customer ---------- */
 function activeCand(){return (WS.candidates||[]).find(c=>c.id===activeId);}
+function curMonth(){return new Date().toISOString().slice(0,7);}
+function monthLabel(m){return new Date(m+'-01T00:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});}
 function customerApp(){
-  el.innerHTML=`<div class="sechdr"><div><div class="lab">Customer dashboard</div><h1 style="font-size:28px">${esc(WS.company||'Your team')}</h1></div>
-    <div class="row"><button class="btn ghost sm" onclick="App.digest()">Email weekly digest</button><button class="btn ghost sm" onclick="App.addCand()">+ Add candidate</button></div></div>
-    <p class="muted" style="max-width:640px">Oversight across your offshore team. Click a candidate to set KPIs, review progress, read their pulse &amp; blockers, and leave feedback.</p>
+  const hdr=`<div class="sechdr"><div><div class="lab">Customer dashboard</div><h1 style="font-size:28px">${esc(WS.company||'Your team')}</h1></div>
+    <div class="row"><button class="btn ghost sm" onclick="App.digest()">Email weekly digest</button><button class="btn ghost sm" onclick="App.addCand()">+ Add candidate</button></div></div>`;
+  const nav=`<div class="tabs" style="margin-bottom:14px"><button class="tab ${cView==='dashboard'?'on':''}" onclick="App.cView('dashboard')">Team dashboard</button><button class="tab ${cView==='commissions'?'on':''}" onclick="App.cView('commissions')">Commissions &amp; bonuses</button></div>`;
+  if(cView==='commissions'){ el.innerHTML=hdr+nav+`<div id="comm"></div>`; renderCommissions(); return; }
+  el.innerHTML=hdr+nav+`
+    <p class="muted" style="max-width:640px">Oversight across your offshore team. Click a candidate to set KPIs &amp; approve time off, review progress, read their pulse &amp; blockers, and leave feedback.</p>
     <div class="roster" id="roster"></div>
     <div id="detail"></div>`;
   renderRoster(); renderDetail();
+}
+function commRow(x){return `<div class="item"><div class="row" style="justify-content:space-between;align-items:center"><div><b>£${(Number(x.amount)||0).toFixed(2)}</b> <span class="muted">· ${esc(x.type)} · ${esc(x.candidateName||'—')}</span>${x.note?`<div class="muted" style="font-size:13px">${esc(x.note)}</div>`:''}<div class="muted" style="font-size:12px">${monthLabel(x.month)}</div></div><button class="del" onclick="App.delComm('${x.id}')">✕</button></div>`;}
+function renderCommissions(){
+  const list=WS.commissions||[]; const cands=WS.candidates||[]; const box=$('#comm');
+  const opts=cands.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')||'<option value="">(no candidates)</option>';
+  const month=curMonth();
+  const thisMonth=list.filter(x=>x.month===month); const earlier=list.filter(x=>x.month!==month);
+  const total=thisMonth.reduce((t,x)=>t+(Number(x.amount)||0),0);
+  box.innerHTML=`<div class="panel"><h3>Add commission / bonus</h3><p class="muted" style="font-size:13px">Log anything due this month. You'll get a reminder on the 15th and a final reminder on the 18th — anything not submitted by then won't be paid. On the 19th the month's total is sent to Untapped.</p>
+    <div class="grid2"><div><label class="fl">Candidate</label><select id="cm_c">${opts}</select></div>
+      <div><label class="fl">Type</label><select id="cm_t"><option>Commission</option><option>Bonus</option></select></div></div>
+    <div class="grid2"><div><label class="fl">Amount (£)</label><input id="cm_a" type="number" inputmode="decimal" placeholder="0.00"></div>
+      <div><label class="fl">Month</label><input id="cm_m" type="month" value="${month}"></div></div>
+    <label class="fl">Note (optional)</label><input id="cm_n" placeholder="e.g. Q3 deal — Acme Ltd">
+    <div class="err" id="cm_err"></div>
+    <button class="btn sm" style="margin-top:6px" onclick="App.addComm()">Add entry</button></div>
+   <div class="panel" style="margin-top:14px"><div class="sechdr"><h3>This month — ${monthLabel(month)}</h3><span class="lab">Total £${total.toFixed(2)}</span></div>
+    ${thisMonth.map(commRow).join('')||'<div class="empty">Nothing logged for this month yet.</div>'}</div>
+   ${earlier.length?`<div class="panel" style="margin-top:14px"><h3>Earlier</h3>${earlier.map(commRow).join('')}</div>`:''}`;
+}
+function timeoffCustomerHTML(c){
+  return balRow(c)+
+    `<div class="panel" style="margin-top:8px"><h3>Allowance &amp; details</h3><p class="muted" style="font-size:13px">Set this candidate's location (for public holidays), their email (for approval notices) and yearly allowance.</p>
+      <div class="grid2"><div><label class="fl">Location</label><select id="to_loc"><option value=""${!c.location?' selected':''}>— not set —</option><option ${c.location==='Philippines'?'selected':''}>Philippines</option><option ${c.location==='South Africa'?'selected':''}>South Africa</option></select></div>
+        <div><label class="fl">Annual allowance (days)</label><input id="to_allow" type="number" inputmode="numeric" value="${c.allowance!=null?c.allowance:20}"></div></div>
+      <label class="fl">Candidate email (for approval emails)</label><input id="to_email" type="email" value="${esc(c.email||'')}" placeholder="name@email.com">
+      <button class="btn sm" style="margin-top:10px" onclick="App.saveCandMeta()">Save details</button></div>
+    <div class="panel" style="margin-top:14px"><h3>Requests</h3>${toReqRows(c,true)}</div>`;
 }
 function renderRoster(){
   const wk=weekKey(new Date());
@@ -254,7 +309,7 @@ function renderDetail(){
   $('#detail').innerHTML=`<div class="panel">
     <div class="sechdr"><h2>${esc(c.name)}</h2><span class="lab">${esc(c.role||'')}</span></div>
     <div class="tabs">
-      ${['dash:Dashboard','kpis:Set KPIs','pulse:Pulse','blockers:Blockers','kudos:Kudos','share:Share'].map(t=>{const [k,n]=t.split(':');return `<button class="tab ${cTab===k?'on':''}" onclick="App.cTab('${k}')">${n}</button>`}).join('')}
+      ${['dash:Dashboard','kpis:Set KPIs','timeoff:Time Off','pulse:Pulse','blockers:Blockers','kudos:Kudos','share:Share'].map(t=>{const [k,n]=t.split(':');return `<button class="tab ${cTab===k?'on':''}" onclick="App.cTab('${k}')">${n}</button>`}).join('')}
     </div>
     <div id="cbody"></div></div>`;
   renderCBody(c);
@@ -281,6 +336,7 @@ function renderCBody(c){
   const box=$('#cbody');
   if(cTab==='dash'){box.innerHTML=dashHTML(c);return;}
   if(cTab==='kpis'){box.innerHTML=`${PERIODS.map(([k,n])=>kpiEditor(c,k,n)).join('')}<div class="row" style="margin-top:16px"><button class="btn ghost sm" onclick="App.examples()">Load example KPIs</button></div>`;return;}
+  if(cTab==='timeoff'){box.innerHTML=timeoffCustomerHTML(c);return;}
   if(cTab==='pulse'){
     const entries=Object.entries(c.pulse||{}).sort((a,b)=>a[0]<b[0]?1:-1);
     box.innerHTML=`<p class="muted" style="font-size:14px">Weekly self-rating from ${esc(c.name)} (1 = low, 5 = high).</p>`+(entries.length?entries.map(([wk,p])=>`<div class="item"><div class="when">${wk}</div><div class="row" style="gap:18px;margin-top:4px"><span>Workload <b>${p.workload??'—'}</b></span><span>Confidence <b>${p.confidence??'—'}</b></span><span>Supported <b>${p.supported??'—'}</b></span></div>${p.note?`<div class="muted" style="margin-top:6px">“${esc(p.note)}”</div>`:''}</div>`).join(''):`<div class="empty">No pulse check-ins yet.</div>`);return;
@@ -317,11 +373,23 @@ let saveTimer=null;
 function queueSaveKpis(){clearTimeout(saveTimer);saveTimer=setTimeout(async()=>{const c=activeCand();await api('saveKpis',{candidateId:c.id,kpis:c.kpis});toast('KPIs saved');},600);}
 
 /* ---------- candidate ---------- */
+function timeoffCandidateHTML(c){
+  const locNote=c.location?('Your location: <b>'+esc(c.location)+'</b> — public holidays there are on top of your allowance and won\'t be deducted.'):'Your location isn\'t set yet — ask your manager to set it so country public holidays are excluded. For now only weekends are excluded.';
+  return balRow(c)+
+   `<div class="panel" style="margin-top:8px"><h3>Request time off</h3><p class="muted" style="font-size:13px">${locNote}</p>
+     <div class="grid2"><div><label class="fl">From</label><input id="to_s" type="date" oninput="App.recalcTO()"></div>
+       <div><label class="fl">To</label><input id="to_e" type="date" oninput="App.recalcTO()"></div></div>
+     <label class="fl">Reason (optional)</label><input id="to_r" placeholder="e.g. Family trip">
+     <div id="to_calc" class="muted" style="margin:10px 0;font-size:14px">Pick your dates to see how many days this uses.</div>
+     <div class="err" id="to_err"></div>
+     <button class="btn sm" onclick="App.submitTO()">Submit request</button></div>
+   <div class="panel" style="margin-top:14px"><h3>Your requests</h3>${toReqRows(c,false)}</div>`;
+}
 function candidateApp(){
   const c=ME;
   el.innerHTML=`<div class="lab">Candidate view</div><h1 style="font-size:28px">Hi ${esc((c.name||'').split(' ')[0])}</h1>
     <p class="muted" style="font-size:14px">Keep your numbers and check-ins up to date. ${esc(company||'')}</p>
-    <div class="tabs">${['log:Log progress','pulse:Weekly pulse','blockers:Blockers','kudos:Feedback'].map(t=>{const[k,n]=t.split(':');return `<button class="tab ${tab2===k?'on':''}" onclick="App.kTab('${k}')">${n}</button>`}).join('')}</div>
+    <div class="tabs">${['log:Log progress','timeoff:Time off','pulse:Weekly pulse','blockers:Blockers','kudos:Feedback'].map(t=>{const[k,n]=t.split(':');return `<button class="tab ${tab2===k?'on':''}" onclick="App.kTab('${k}')">${n}</button>`}).join('')}</div>
     <div id="kbody"></div>`;
   renderKBody();
 }
@@ -349,6 +417,7 @@ function renderKBody(){
       <textarea id="bnew" placeholder="e.g. I don't have access to the CRM yet"></textarea>
       <button class="btn sm" style="margin-top:10px" onclick="App.raiseBlocker()">Raise blocker</button>
       <div style="margin-top:14px">${(c.blockers||[]).map(b=>`<div class="item"><div class="row" style="justify-content:space-between"><span class="badge ${b.resolved?'':'open'}">${b.resolved?'Resolved':'Open'}</span><span class="when">${new Date(b.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span></div><div style="margin-top:6px">${esc(b.text)}</div>${b.resolved?'':`<button class="btn ghost sm" style="margin-top:8px" onclick="App.resolve('${b.id}')">Mark resolved</button>`}</div>`).join('')||'<div class="empty">No blockers — nice.</div>'}</div></div>`;
+  } else if(tab2==='timeoff'){ box.innerHTML=timeoffCandidateHTML(c); App.recalcTO();
   } else {
     box.innerHTML=`<div class="panel"><h3>Feedback from your customer</h3><div style="margin-top:10px">${(c.kudos||[]).map(k=>`<div class="item"><div class="when">${new Date(k.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div><div style="margin-top:4px">${esc(k.text)}</div></div>`).join('')||'<div class="empty">No feedback yet.</div>'}</div></div>`;
   }
@@ -392,13 +461,26 @@ const App={
   setScale:(name,n)=>{pulseDraft[name]=n;document.querySelectorAll(`[data-sc="${name}"] button`).forEach((b,i)=>b.classList.toggle('on',i+1===n));},
   savePulse:async()=>{const wk=weekKey(new Date());const note=$('#pnote').value;const j=await api('savePulse',{candidateId:ME.id,weekKey:wk,workload:pulseDraft.workload,confidence:pulseDraft.confidence,supported:pulseDraft.supported,note});if(j.ok){ME.pulse=ME.pulse||{};ME.pulse[wk]={...pulseDraft,note};$('#pok').textContent='Saved ✓';}},
   raiseBlocker:async()=>{const t=$('#bnew').value.trim();if(!t)return;const j=await api('addBlocker',{candidateId:ME.id,text:t});if(j.ok){await refresh();renderKBody();toast('Blocker raised');}},
+  // customer view switch
+  cView:v=>{cView=v;customerApp();},
+  // time off — customer
+  saveCandMeta:async()=>{const c=activeCand();const j=await api('editCandidate',{candidateId:c.id,location:$('#to_loc').value,allowance:$('#to_allow').value,email:$('#to_email').value.trim()});if(j.ok){await refresh();renderDetail();toast('Details saved');}else toast(j.error||'Failed');},
+  decideTO:async(cid,rid,status)=>{const j=await api('decideTimeoff',{candidateId:cid,requestId:rid,status});if(j.ok){await refresh();renderDetail();toast('Time off '+status);}else toast(j.error||'Failed');},
+  // time off — candidate
+  recalcTO:()=>{const s=$('#to_s'),e=$('#to_e'),box=$('#to_calc');if(!s||!e||!box)return;if(!s.value||!e.value){box.textContent='Pick your dates to see how many days this uses.';return;}const calc=workDays(s.value,e.value,ME.location);if(calc.invalid){box.innerHTML='<span style="color:#ff9a92">End date is before the start date.</span>';return;}let note='Weekends excluded.';if(calc.skipped.length)note+=' Public holidays not counted: '+[...new Set(calc.skipped)].join(', ')+'.';box.innerHTML='<b style="color:#FFC600">'+calc.days+' working day'+(calc.days===1?'':'s')+'</b> will be deducted if approved.<div style="font-size:12.5px;margin-top:3px">'+note+'</div>';},
+  submitTO:async()=>{const s=$('#to_s').value,e=$('#to_e').value,r=$('#to_r').value.trim();const calc=workDays(s,e,ME.location);if(!s||!e||calc.invalid||calc.days<1){$('#to_err').textContent='Pick a valid date range with at least one working day.';return;}const j=await api('submitTimeoff',{start:s,end:e,reason:r});if(j.ok){await refresh();renderKBody();toast('Request submitted');}else $('#to_err').textContent=j.error||'Failed';},
+  cancelTO:async(rid)=>{const j=await api('cancelTimeoff',{requestId:rid});if(j.ok){await refresh();renderKBody();toast('Cancelled');}},
+  // commissions (customer)
+  addComm:async()=>{const amount=$('#cm_a').value;if(!amount||Number(amount)<=0){$('#cm_err').textContent='Enter an amount greater than 0.';return;}const j=await api('addCommission',{candidateId:$('#cm_c').value,amount,type:$('#cm_t').value,note:$('#cm_n').value.trim(),month:$('#cm_m').value});if(j.ok){await refresh();renderCommissions();toast('Added');}else $('#cm_err').textContent=j.error||'Failed';},
+  delComm:async(id)=>{const j=await api('deleteCommission',{commissionId:id});if(j.ok){await refresh();renderCommissions();toast('Removed');}},
 };
 /* live auto-refresh for the customer dashboard (every 30s, paused when tab hidden or editing) */
 async function autoTick(){
   if(role!=='customer'||document.hidden) return;
   const ae=document.activeElement;
   if(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return; // don't clobber typing
-  if(cTab==='kpis'||cTab==='kudos') return;                    // don't disturb editing views
+  if(cView!=='dashboard') return;                              // not on the roster view (e.g. commissions)
+  if(cTab==='kpis'||cTab==='kudos'||cTab==='timeoff') return;  // don't disturb editing/approval views
   if(await refresh() && role==='customer'){ renderRoster(); renderDetail(); }
 }
 setInterval(autoTick,30000);
