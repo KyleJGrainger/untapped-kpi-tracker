@@ -174,8 +174,19 @@ exports.handler = async (event) => {
     if (!isCustomer) return json(403, { error: 'forbidden' });
     ws.commissions = ws.commissions || [];
     const month = /^\d{4}-\d{2}$/.test(String(b.month)) ? b.month : new Date().toISOString().slice(0, 7);
-    ws.commissions.unshift({ id: uid(), candidateId: b.candidateId || '', candidateName: (findCandidate(ws, b.candidateId) || {}).name || '', amount: Math.max(0, Number(b.amount) || 0), type: b.type === 'Bonus' ? 'Bonus' : 'Commission', note: String(b.note || '').slice(0, 400), month, ts: new Date().toISOString() });
-    await save(); return json(200, { ok: true });
+    const entry = { id: uid(), candidateId: b.candidateId || '', candidateName: (findCandidate(ws, b.candidateId) || {}).name || '', amount: Math.max(0, Number(b.amount) || 0), type: b.type === 'Bonus' ? 'Bonus' : 'Commission', note: String(b.note || '').slice(0, 400), month, ts: new Date().toISOString() };
+    ws.commissions.unshift(entry);
+    await save();
+    const monthLbl = new Date(month + '-01T00:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> just logged a ${esc(entry.type.toLowerCase())} for <b>${esc(entry.candidateName || '—')}</b>.</p>
+      <table style="border-collapse:collapse;width:100%;font-size:14px;margin-top:8px">
+        <tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#777">Amount</td><td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:700">£${entry.amount.toFixed(2)}</td></tr>
+        <tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#777">Type</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${esc(entry.type)}</td></tr>
+        <tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#777">For month</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${esc(monthLbl)}</td></tr>
+        ${entry.note ? `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#777">Note</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${esc(entry.note)}</td></tr>` : ''}
+      </table>`;
+    await mail(TEAM, `New ${entry.type.toLowerCase()} logged — ${ws.company || 'client'} · £${entry.amount.toFixed(2)}`, emailWrap('New commission logged', body, ws, process.env.SITE_URL));
+    return json(200, { ok: true });
   }
   if (action === 'deleteCommission') {
     if (!isCustomer) return json(403, { error: 'forbidden' });
