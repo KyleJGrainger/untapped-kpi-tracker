@@ -455,7 +455,7 @@ const App={
   sendKudos:async()=>{const t=$('#kud').value.trim();if(!t)return;const c=activeCand();const j=await api('addKudos',{candidateId:c.id,text:t});if(j.ok){await refresh();renderDetail();toast('Kudos sent');}},
   resolve:async id=>{await api('resolveBlocker',{candidateId:(role==='customer'?activeId:ME.id),blockerId:id});await refresh();if(role==='customer')renderDetail();else renderKBody();toast('Resolved');},
   // candidate
-  kTab:t=>{tab2=t;renderKBody();},
+  kTab:t=>{tab2=t;candidateApp();},
   setTab:t=>{tab=t;renderKBody();},
   shift:dir=>{if(tab==='daily'){const d=new Date(cursor.daily+'T00:00:00');d.setDate(d.getDate()+dir);cursor.daily=d.toISOString().slice(0,10);}else if(tab==='monthly'){const d=new Date(cursor.monthly+'-01T00:00:00');d.setMonth(d.getMonth()+dir);cursor.monthly=monthKey(d);}else{const yr=+cursor.weekly.split('-W')[0],wk=+cursor.weekly.split('-W')[1];const base=new Date(Date.UTC(yr,0,1+(wk-1)*7));base.setUTCDate(base.getUTCDate()+dir*7);cursor.weekly=weekKey(base);}renderLog();},
   jumpNow:()=>{cursor={daily:today(),weekly:weekKey(new Date()),monthly:monthKey(new Date())};renderLog();},
