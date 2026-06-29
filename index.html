@@ -140,6 +140,7 @@ function workDays(start,end,loc){
 function toBooked(c){return (c.timeoff||[]).filter(r=>r.status==='approved').reduce((t,r)=>t+workDays(r.start,r.end,c.location).days,0);}
 function toPending(c){return (c.timeoff||[]).filter(r=>r.status==='pending').reduce((t,r)=>t+workDays(r.start,r.end,c.location).days,0);}
 function fmtD(s){return new Date(s+'T00:00:00Z').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}
+function embedHTML(url,label){const clean=url.replace('https://','').replace(/\/$/,'');return '<p class="muted" style="font-size:13px;margin:0 0 10px">'+label+' — also shareable directly at <a href="'+url+'" target="_blank" style="color:#FFC600">'+clean+'</a></p><iframe src="'+url+'" style="width:100%;height:78vh;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:#101820"></iframe>';}
 function balRow(c){const a=c.allowance||0,b=toBooked(c),p=toPending(c),r=a-b;return '<div style="display:flex;gap:26px;flex-wrap:wrap;margin:6px 0 8px">'+[['Allowance',a,''],['Booked',b,''],['Pending',p,''],['Remaining',r,'color:#FFC600']].map(x=>'<div><div style="font-family:Georgia,serif;font-size:26px;line-height:1;'+x[2]+'">'+x[1]+'</div><div class="lab" style="margin-top:4px">'+x[0]+'</div></div>').join('')+'</div>';}
 function toReqRows(c,forClient){const list=c.timeoff||[];if(!list.length)return '<div class="empty">No requests yet.</div>';return list.map(r=>{const calc=workDays(r.start,r.end,c.location);let act='';if(forClient&&r.status==='pending')act='<button class="btn sm" style="background:#34c759;color:#04210e" onclick="App.decideTO(\''+c.id+'\',\''+r.id+'\',\'approved\')">Approve</button> <button class="btn ghost sm" onclick="App.decideTO(\''+c.id+'\',\''+r.id+'\',\'declined\')">Decline</button>';else if(!forClient&&r.status==='pending')act='<button class="btn ghost sm" onclick="App.cancelTO(\''+r.id+'\')">Cancel</button>';else act='<span class="badge '+(r.status==='approved'?'':'open')+'">'+r.status+'</span>';return '<div class="item"><div class="row" style="justify-content:space-between;align-items:center"><div><b>'+fmtD(r.start)+' → '+fmtD(r.end)+'</b> <span class="muted">· '+calc.days+' day'+(calc.days===1?'':'s')+'</span>'+(r.reason?'<div class="muted" style="font-size:13px">'+esc(r.reason)+'</div>':'')+(calc.skipped.length?'<div class="muted" style="font-size:12px">'+calc.skipped.length+' public holiday not counted</div>':'')+'</div><div>'+act+'</div></div></div>';}).join('');}
 
@@ -251,7 +252,8 @@ function monthLabel(m){return new Date(m+'-01T00:00:00').toLocaleDateString('en-
 function customerApp(){
   const hdr=`<div class="sechdr"><div><div class="lab">Customer dashboard</div><h1 style="font-size:28px">${esc(WS.company||'Your team')}</h1></div>
     <div class="row"><button class="btn ghost sm" onclick="App.digest()">Email weekly digest</button><button class="btn ghost sm" onclick="App.addCand()">+ Add candidate</button></div></div>`;
-  const nav=`<div class="tabs" style="margin-bottom:14px"><button class="tab ${cView==='dashboard'?'on':''}" onclick="App.cView('dashboard')">Team dashboard</button><button class="tab ${cView==='commissions'?'on':''}" onclick="App.cView('commissions')">Commissions &amp; bonuses</button></div>`;
+  const nav=`<div class="tabs" style="margin-bottom:14px"><button class="tab ${cView==='dashboard'?'on':''}" onclick="App.cView('dashboard')">Team dashboard</button><button class="tab ${cView==='commissions'?'on':''}" onclick="App.cView('commissions')">Commissions &amp; bonuses</button><button class="tab ${cView==='playbook'?'on':''}" onclick="App.cView('playbook')">90-day Playbook</button></div>`;
+  if(cView==='playbook'){ el.innerHTML=hdr+nav+embedHTML('https://untapped-playbook.netlify.app/','The 90-day onboarding Playbook'); return; }
   if(cView==='commissions'){ el.innerHTML=hdr+nav+`<div id="comm"></div>`; renderCommissions(); return; }
   el.innerHTML=hdr+nav+`
     <p class="muted" style="max-width:640px">Oversight across your offshore team. Click a candidate to set KPIs &amp; approve time off, review progress, read their pulse &amp; blockers, and leave feedback.</p>
@@ -389,7 +391,7 @@ function candidateApp(){
   const c=ME;
   el.innerHTML=`<div class="lab">Candidate view</div><h1 style="font-size:28px">Hi ${esc((c.name||'').split(' ')[0])}</h1>
     <p class="muted" style="font-size:14px">Keep your numbers and check-ins up to date. ${esc(company||'')}</p>
-    <div class="tabs">${['log:Log progress','timeoff:Time off','pulse:Weekly pulse','blockers:Blockers','kudos:Feedback'].map(t=>{const[k,n]=t.split(':');return `<button class="tab ${tab2===k?'on':''}" onclick="App.kTab('${k}')">${n}</button>`}).join('')}</div>
+    <div class="tabs">${['log:Log progress','journey:Your journey','timeoff:Time off','pulse:Weekly pulse','blockers:Blockers','kudos:Feedback'].map(t=>{const[k,n]=t.split(':');return `<button class="tab ${tab2===k?'on':''}" onclick="App.kTab('${k}')">${n}</button>`}).join('')}</div>
     <div id="kbody"></div>`;
   renderKBody();
 }
@@ -417,6 +419,7 @@ function renderKBody(){
       <textarea id="bnew" placeholder="e.g. I don't have access to the CRM yet"></textarea>
       <button class="btn sm" style="margin-top:10px" onclick="App.raiseBlocker()">Raise blocker</button>
       <div style="margin-top:14px">${(c.blockers||[]).map(b=>`<div class="item"><div class="row" style="justify-content:space-between"><span class="badge ${b.resolved?'':'open'}">${b.resolved?'Resolved':'Open'}</span><span class="when">${new Date(b.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span></div><div style="margin-top:6px">${esc(b.text)}</div>${b.resolved?'':`<button class="btn ghost sm" style="margin-top:8px" onclick="App.resolve('${b.id}')">Mark resolved</button>`}</div>`).join('')||'<div class="empty">No blockers — nice.</div>'}</div></div>`;
+  } else if(tab2==='journey'){ box.innerHTML=embedHTML('https://untapped-journey.netlify.app/','Your Untapped journey guide');
   } else if(tab2==='timeoff'){ box.innerHTML=timeoffCandidateHTML(c); App.recalcTO();
   } else {
     box.innerHTML=`<div class="panel"><h3>Feedback from your customer</h3><div style="margin-top:10px">${(c.kudos||[]).map(k=>`<div class="item"><div class="when">${new Date(k.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div><div style="margin-top:4px">${esc(k.text)}</div></div>`).join('')||'<div class="empty">No feedback yet.</div>'}</div></div>`;
