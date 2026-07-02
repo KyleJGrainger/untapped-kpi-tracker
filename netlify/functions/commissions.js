@@ -26,7 +26,7 @@ function monthLabel(m) { return new Date(m + '-01T00:00:00Z').toLocaleDateString
 
 exports.handler = async () => {
   const { RESEND_API_KEY, FROM_EMAIL } = process.env;
-  const SITE_URL = process.env.SITE_URL || 'https://untapped-kpi-tracker-v2.netlify.app';
+  const SITE_URL = process.env.SITE_URL || 'https://untappeddashboard.netlify.app';
   if (!RESEND_API_KEY || !FROM_EMAIL) return { statusCode: 200, body: 'email not configured' };
   const day = new Date().getUTCDate();
   const month = curMonth();
