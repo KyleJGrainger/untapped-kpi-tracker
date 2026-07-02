@@ -102,6 +102,11 @@ function findCandidate(ws, id){ return (ws.candidates||[]).find(c=>c.id===id); }
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
   let b; try { b = JSON.parse(event.body || '{}'); } catch (e) { return json(400, { error: 'bad json' }); }
+  // Build the tracker link from the domain this request actually came from, so email
+  // links keep working even if the Netlify site is renamed. Falls back to SITE_URL env.
+  const H = event.headers || {};
+  const reqHost = H['x-forwarded-host'] || H['host'] || '';
+  const reqBase = reqHost ? `${H['x-forwarded-proto'] || 'https'}://${reqHost}` : (process.env.SITE_URL || '');
   const { getStore } = await import('@netlify/blobs');
   const store = getStore(process.env.NETLIFY_BLOBS_TOKEN
     ? { name: 'kpi-workspaces', siteID: process.env.BLOBS_SITE_ID, token: process.env.NETLIFY_BLOBS_TOKEN }
@@ -185,7 +190,7 @@ exports.handler = async (event) => {
         <tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#777">For month</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${esc(monthLbl)}</td></tr>
         ${entry.note ? `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#777">Note</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${esc(entry.note)}</td></tr>` : ''}
       </table>`;
-    await mail(TEAM, `New ${entry.type.toLowerCase()} logged — ${ws.company || 'client'} · £${entry.amount.toFixed(2)}`, emailWrap('New commission logged', body, ws, process.env.SITE_URL));
+    await mail(TEAM, `New ${entry.type.toLowerCase()} logged — ${ws.company || 'client'} · £${entry.amount.toFixed(2)}`, emailWrap('New commission logged', body, ws, reqBase));
     return json(200, { ok: true });
   }
   if (action === 'deleteCommission') {
@@ -211,7 +216,7 @@ exports.handler = async (event) => {
       ${b.status==='approved'?`<tr><td style="padding:4px 14px 4px 0;color:#777">Remaining allowance</td><td style="padding:4px 0">${remaining} of ${c.allowance} days</td></tr>`:''}
       </table>`;
     const recipients = [...new Set([c.email, ws.customerEmail, ...TEAM].filter(Boolean))];
-    await mail(recipients, `Time off ${verb} — ${c.name} (${ws.company || 'Untapped'})`, emailWrap(`Time off ${verb}`, body, ws, process.env.SITE_URL));
+    await mail(recipients, `Time off ${verb} — ${c.name} (${ws.company || 'Untapped'})`, emailWrap(`Time off ${verb}`, body, ws, reqBase));
     return json(200, { ok: true });
   }
   if (action === 'saveKpis') {
@@ -227,9 +232,9 @@ exports.handler = async (event) => {
   }
   if (action === 'digestNow') {
     if (!isCustomer) return json(403, { error: 'forbidden' });
-    const { RESEND_API_KEY, FROM_EMAIL, SITE_URL } = process.env;
+    const { RESEND_API_KEY, FROM_EMAIL } = process.env;
     if (!RESEND_API_KEY || !FROM_EMAIL || !ws.customerEmail) return json(200, { ok: false, note: 'email not configured' });
-    try { await sendEmail(RESEND_API_KEY, { from: FROM_EMAIL, to: [ws.customerEmail], subject: `Weekly update — ${ws.company || 'your team'}`, html: digestHTML(ws, SITE_URL) }); return json(200, { ok: true }); }
+    try { await sendEmail(RESEND_API_KEY, { from: FROM_EMAIL, to: [ws.customerEmail], subject: `Weekly update — ${ws.company || 'your team'}`, html: digestHTML(ws, reqBase) }); return json(200, { ok: true }); }
     catch (e) { return json(502, { error: e.message }); }
   }
 
@@ -275,7 +280,7 @@ exports.handler = async (event) => {
       <tr><td style="padding:4px 14px 4px 0;color:#777">Working days</td><td style="padding:4px 0">${calc.days}</td></tr>
       ${req.reason?`<tr><td style="padding:4px 14px 4px 0;color:#777">Reason</td><td style="padding:4px 0">${esc(req.reason)}</td></tr>`:''}
       </table>`;
-    await mail(ws.customerEmail, `Time-off request to approve — ${c.name}`, emailWrap('New time-off request', body, ws, process.env.SITE_URL));
+    await mail(ws.customerEmail, `Time-off request to approve — ${c.name}`, emailWrap('New time-off request', body, ws, reqBase));
     return json(200, { ok: true });
   }
   if (action === 'cancelTimeoff') {
