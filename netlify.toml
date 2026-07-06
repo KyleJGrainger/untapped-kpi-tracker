@@ -1,4 +1,5 @@
 # Untapped KPI Tracker — Netlify config
+# Storage uses Netlify's built-in Blobs automatically (no explicit token needed).
 [build]
   publish = "."
   functions = "netlify/functions"
