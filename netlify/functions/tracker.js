@@ -122,6 +122,7 @@ exports.handler = async (event) => {
       id: wsId, company: b.company || '', customerEmail: b.customerEmail || '',
       customerPin: String(b.customerPin), createdAt: new Date().toISOString(),
       commissions: [],
+      onboarding: { required: false, retainer: 1000, status: 'pending', signed: null, paid: null, questionnaireDone: false },
       candidates: [{
         id: candId, name: b.candidate || 'Candidate', role: b.role || '',
         email: b.email || '', location: b.location || '', allowance: Number(b.allowance) || 20, timeoff: [],
@@ -137,6 +138,85 @@ exports.handler = async (event) => {
   const wsId = b.wsId; if (!wsId) return json(400, { error: 'missing wsId' });
   const ws = await store.get(wsId, { type: 'json' });
   if (!ws) return json(404, { error: 'not found' });
+  if (!ws.onboarding) ws.onboarding = { required: false, retainer: 1000, status: 'pending', signed: null, paid: null, questionnaireDone: false };
+
+  /* ---- PUBLIC onboarding funnel actions (no PIN — this layer sits in front of PIN entry) ---- */
+  const obSave = async () => { await store.setJSON(wsId, ws); };
+  const obPublic = () => ({
+    required: !!ws.onboarding.required, retainer: Number(ws.onboarding.retainer) || 1000,
+    status: ws.onboarding.status || 'pending', company: ws.company || '',
+    signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone
+  });
+  const obRecompute = () => {
+    const o = ws.onboarding;
+    if (o.paid && o.questionnaireDone) o.status = 'complete';
+    else if (o.paid) o.status = 'paid';
+    else if (o.signed) o.status = 'signed';
+    else o.status = 'pending';
+  };
+  if (action === 'onboardingStatus') {
+    return json(200, { ok: true, onboarding: obPublic() });
+  }
+  if (action === 'submitSignature') {
+    if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
+    const name = String(b.name || '').trim();
+    if (name.length < 2) return json(400, { error: 'enter your full name' });
+    const ip = (H['x-nf-client-connection-ip'] || (H['x-forwarded-for'] || '').split(',')[0] || '').trim();
+    ws.onboarding.signed = { name, ip, ts: new Date().toISOString() };
+    obRecompute(); await obSave();
+    const sBody = `<p style="font-size:15px;color:#333"><b>${esc(name)}</b> has signed the terms for <b>${esc(ws.company || 'a new client')}</b>.</p><p style="color:#777;font-size:13px">Signed ${new Date().toLocaleString('en-GB')} · IP ${esc(ip || 'n/a')}. Awaiting retainer payment (£${(Number(ws.onboarding.retainer) || 1000).toFixed(0)}).</p>`;
+    await mail(TEAM, `Terms signed — ${ws.company || 'new client'}`, emailWrap('Terms signed', sBody, ws, reqBase));
+    return json(200, { ok: true, onboarding: obPublic() });
+  }
+  if (action === 'createCheckout') {
+    if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
+    if (!ws.onboarding.signed) return json(400, { error: 'please sign the terms first' });
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) return json(200, { ok: false, error: 'payment not configured' });
+    const amount = Math.round((Number(ws.onboarding.retainer) || 1000) * 100);
+    const base = reqBase.replace(/\/$/, '');
+    const params = new URLSearchParams();
+    params.append('mode', 'payment');
+    params.append('success_url', `${base}/?w=${wsId}&ob=paid&sid={CHECKOUT_SESSION_ID}`);
+    params.append('cancel_url', `${base}/?w=${wsId}&ob=cancel`);
+    params.append('client_reference_id', wsId);
+    params.append('metadata[wsId]', wsId);
+    params.append('line_items[0][quantity]', '1');
+    params.append('line_items[0][price_data][currency]', 'gbp');
+    params.append('line_items[0][price_data][unit_amount]', String(amount));
+    params.append('line_items[0][price_data][product_data][name]', `Retainer — ${ws.company || 'Untapped'}`);
+    try {
+      const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+        method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString()
+      });
+      const sess = await r.json();
+      if (!r.ok) return json(200, { ok: false, error: (sess.error && sess.error.message) || 'Stripe error' });
+      return json(200, { ok: true, url: sess.url });
+    } catch (e) { return json(200, { ok: false, error: e.message }); }
+  }
+  if (action === 'verifyCheckout') {
+    if (ws.onboarding.paid) { obRecompute(); return json(200, { ok: true, onboarding: obPublic() }); }
+    const key = process.env.STRIPE_SECRET_KEY;
+    const sid = String(b.sessionId || '');
+    if (!key || !sid) return json(200, { ok: false, error: 'cannot verify' });
+    try {
+      const r = await fetch('https://api.stripe.com/v1/checkout/sessions/' + encodeURIComponent(sid), { headers: { Authorization: `Bearer ${key}` } });
+      const sess = await r.json();
+      if (r.ok && sess.payment_status === 'paid' && (sess.metadata && sess.metadata.wsId) === wsId) {
+        ws.onboarding.paid = { amount: (sess.amount_total || 0) / 100, sessionId: sid, ts: new Date().toISOString() };
+        obRecompute(); await obSave();
+        const pBody = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has paid their retainer of <b>£${((sess.amount_total || 0) / 100).toFixed(2)}</b>.</p><p style="color:#777;font-size:13px">Signed by ${esc((ws.onboarding.signed || {}).name || '—')}. They now continue to the kick-off questionnaire.</p>`;
+        await mail(TEAM, `Retainer paid — ${ws.company || 'client'} · £${((sess.amount_total || 0) / 100).toFixed(2)}`, emailWrap('Retainer paid', pBody, ws, reqBase));
+      }
+      return json(200, { ok: true, onboarding: obPublic() });
+    } catch (e) { return json(200, { ok: false, error: e.message }); }
+  }
+  if (action === 'markQuestionnaireDone') {
+    if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
+    ws.onboarding.questionnaireDone = true; ws.onboarding.questionnaireTs = new Date().toISOString();
+    obRecompute(); await obSave();
+    return json(200, { ok: true, onboarding: obPublic() });
+  }
 
   const isCustomer = String(b.pin) === ws.customerPin;
   const candByPin = (ws.candidates || []).find(c => c.candidatePin === String(b.pin));
@@ -173,6 +253,18 @@ exports.handler = async (event) => {
     if (b.email != null) c.email = String(b.email);
     if (b.location != null) c.location = String(b.location);
     if (b.allowance != null) c.allowance = Math.max(0, Number(b.allowance) || 0);
+    await save(); return json(200, { ok: true });
+  }
+  if (action === 'setOnboardingConfig') {
+    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (b.required != null) ws.onboarding.required = !!b.required;
+    if (b.retainer != null) ws.onboarding.retainer = Math.max(0, Number(b.retainer) || 0);
+    obRecompute(); await save();
+    return json(200, { ok: true, onboarding: { ...ws.onboarding } });
+  }
+  if (action === 'resetOnboarding') {
+    if (!isCustomer) return json(403, { error: 'forbidden' });
+    ws.onboarding.signed = null; ws.onboarding.paid = null; ws.onboarding.questionnaireDone = false; ws.onboarding.status = 'pending';
     await save(); return json(200, { ok: true });
   }
   if (action === 'addCommission') {
