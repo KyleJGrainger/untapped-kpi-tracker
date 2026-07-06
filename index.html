@@ -147,6 +147,8 @@ function toReqRows(c,forClient){const list=c.timeoff||[];if(!list.length)return 
 /* session + api */
 let wsId=null, pin=null, role=null, WS=null, ME=null, company='';
 let activeId=null, tab='daily', cTab='dash', cView='dashboard';
+let OB=null; // onboarding funnel status (public, pre-PIN)
+const KICKOFF_URL='https://untappedkickoff.netlify.app/';
 let cursor={daily:today(),weekly:weekKey(new Date()),monthly:monthKey(new Date())};
 function saveSession(){try{localStorage.setItem('untapped_kpi_session',JSON.stringify({wsId,pin}))}catch(e){}}
 function clearSession(){try{localStorage.removeItem('untapped_kpi_session')}catch(e){}}
@@ -168,11 +170,21 @@ async function refresh(){
 /* ---------- routing ---------- */
 async function init(){
   const u=new URL(location.href); const w=u.searchParams.get('w');
+  const obParam=u.searchParams.get('ob'), sid=u.searchParams.get('sid');
   let sess=null; try{sess=JSON.parse(localStorage.getItem('untapped_kpi_session')||'null')}catch(e){}
   if(w) wsId=w; else if(sess&&sess.wsId) wsId=sess.wsId;
+  // Returning staff/client with a saved PIN go straight in (this also bypasses the funnel).
   if(wsId && sess && sess.wsId===wsId && sess.pin){ pin=sess.pin; if(await refresh()){ route(); return; } }
-  if(wsId) unlock(); else landing();
+  if(!wsId){ landing(); return; }
+  // Onboarding gate — sits in front of PIN entry.
+  const os=await api('onboardingStatus'); OB=os&&os.onboarding;
+  if(OB && OB.required && OB.status!=='complete'){
+    if(obParam==='paid' && sid){ return obVerify(sid); }
+    return obFunnel(obStepFor(OB));
+  }
+  unlock();
 }
+function obStepFor(o){ if(!o.signed) return 'welcome'; if(!o.paid) return 'pay'; if(!o.questionnaireDone) return 'quiz'; return 'done'; }
 function route(){
   try{ if(wsId) history.replaceState(null,'',location.pathname+'?w='+wsId); }catch(e){} // keep recoverable link in the address bar
   who.innerHTML=`<span>${role==='customer'?esc(WS.company||'Customer'):esc(company)} · ${role==='customer'?'Customer':'Candidate'}</span><button class="lock" onclick="App.lock()">Lock</button>`;
@@ -245,6 +257,81 @@ function unlock(){
   const p=$('#pin');p.focus();p.addEventListener('keydown',e=>{if(e.key==='Enter')App.unlock();});
 }
 
+/* ---------- onboarding funnel (sits in front of PIN) ---------- */
+function obStepper(active){
+  const steps=[['terms','Terms'],['pay','Payment'],['quiz','Kick-off']];
+  return `<div class="row" style="gap:8px;justify-content:center;margin:0 0 18px">${steps.map((s,i)=>{
+    const done=steps.findIndex(x=>x[0]===active)>i, on=s[0]===active;
+    const col=done?'#FF6900':on?'#FFC600':'rgba(255,255,255,.18)';
+    return `<span style="display:flex;align-items:center;gap:8px;font-size:12px;color:${on||done?'#fff':'var(--muted)'}"><span style="width:20px;height:20px;border-radius:50%;background:${col};color:#101820;display:inline-flex;align-items:center;justify-content:center;font-weight:700">${i+1}</span>${s[1]}</span>`;
+  }).join('<span style="color:rgba(255,255,255,.2)">—</span>')}</div>`;
+}
+function obStaffLink(){ return `<p class="muted" style="font-size:12px;margin-top:16px;text-align:center">Untapped staff or already onboarded? <a href="#" onclick="App.obStaff();return false" style="color:var(--muted);text-decoration:underline">Enter PIN</a></p>`; }
+function obFunnel(step){
+  const co=(OB&&OB.company)||'Untapped', ret=(OB&&OB.retainer)||1000;
+  if(step==='welcome'){
+    el.innerHTML=`<div class="center"><div class="card" style="max-width:620px;width:100%">
+      <div class="heatrule"></div><div class="lab">Welcome to Untapped</div>
+      <h1 style="font-size:30px">Let's get ${esc(co)} set up</h1>
+      <p class="muted" style="font-size:15px;line-height:1.6">[PLACEHOLDER — sales / welcome copy] Here's a short overview of how we work together and what happens next. In a moment you'll review and sign our terms, pay your onboarding retainer, and complete a short kick-off questionnaire — then your dashboard opens automatically.</p>
+      <div class="share" style="margin-top:14px"><b>Next steps</b><br><span class="muted">[PLACEHOLDER] 1) Sign terms · 2) Pay £${ret} retainer · 3) Complete kick-off questionnaire · 4) Access your dashboard</span></div>
+      <button class="btn" style="width:100%;margin-top:16px" onclick="App.obGo('terms')">Get started →</button>
+      ${obStaffLink()}
+    </div></div>`; return;
+  }
+  if(step==='terms'){
+    el.innerHTML=`<div class="center"><div class="card" style="max-width:620px;width:100%">
+      <div class="heatrule"></div>${obStepper('terms')}
+      <h1 style="font-size:24px">Review &amp; sign our terms</h1>
+      <div style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0;font-size:13px;line-height:1.6;color:var(--muted)">
+        <b style="color:#fff">Untapped — Terms of Engagement [PLACEHOLDER]</b><br><br>
+        1. Scope of services. [PLACEHOLDER text]<br><br>2. Retainer &amp; fees. A retainer of £${ret} is payable to begin. [PLACEHOLDER]<br><br>3. Confidentiality. [PLACEHOLDER]<br><br>4. Term &amp; termination. [PLACEHOLDER]<br><br>5. Liability. [PLACEHOLDER]<br><br>By typing your name and ticking the box you agree to these terms on behalf of your company.
+      </div>
+      <label class="fl">Full name</label><input id="ob_name" placeholder="e.g. Jane Smith">
+      <label class="row" style="align-items:center;gap:10px;margin-top:12px;cursor:pointer;font-size:14px"><input type="checkbox" id="ob_agree" style="width:18px;height:18px"> I have read and agree to the terms above.</label>
+      <div class="err" id="ob_err"></div>
+      <button class="btn" style="width:100%;margin-top:8px" onclick="App.obSign()">Agree &amp; continue →</button>
+      ${obStaffLink()}
+    </div></div>`; return;
+  }
+  if(step==='pay'){
+    el.innerHTML=`<div class="center"><div class="card" style="max-width:520px;width:100%;text-align:center">
+      <div class="heatrule" style="margin:0 auto"></div>${obStepper('pay')}
+      <h1 style="font-size:24px">Pay your retainer</h1>
+      <p class="muted" style="font-size:14px">Terms signed ✓ — thank you. To begin, please pay your onboarding retainer.</p>
+      <div style="font-family:Iowan Old Style,Georgia,serif;font-size:44px;margin:14px 0">£${ret}</div>
+      <div class="err" id="ob_err"></div>
+      <button class="btn" style="width:100%" onclick="App.obPay()">Pay securely with card →</button>
+      <p class="muted" style="font-size:12px;margin-top:8px">Payments processed securely by Stripe.</p>
+      ${obStaffLink()}
+    </div></div>`; return;
+  }
+  if(step==='quiz'){
+    el.innerHTML=`<div class="center" style="align-items:flex-start"><div class="card" style="max-width:900px;width:100%">
+      <div class="heatrule"></div>${obStepper('quiz')}
+      <h1 style="font-size:24px">Kick-off questionnaire</h1>
+      <p class="muted" style="font-size:14px">Payment received ✓ — last step. Please complete the questionnaire below, then click continue.</p>
+      ${embedHTML(KICKOFF_URL,'Pre-kick-off questionnaire')}
+      <button class="btn" style="width:100%;margin-top:16px" onclick="App.obQuizDone()">I've completed it — continue →</button>
+    </div></div>`; return;
+  }
+  // done
+  el.innerHTML=`<div class="center"><div class="card" style="max-width:520px;width:100%;text-align:center">
+    <div class="heatrule" style="margin:0 auto 14px"></div>
+    <h1 style="font-size:26px">You're all set ✓</h1>
+    <p class="muted" style="font-size:15px">Thanks, ${esc(co)}. Your onboarding is complete — enter your dashboard PIN to get started.</p>
+    <button class="btn" style="width:100%;margin-top:16px" onclick="App.obStaff()">Enter your dashboard →</button>
+  </div></div>`;
+}
+async function obVerify(sid){
+  el.innerHTML=`<div class="center"><div class="card" style="max-width:460px;width:100%;text-align:center"><div class="heatrule" style="margin:0 auto 14px"></div><h2>Confirming your payment…</h2><p class="muted" style="font-size:13px">One moment.</p></div></div>`;
+  const j=await api('verifyCheckout',{sessionId:sid});
+  OB=(j&&j.onboarding)||OB;
+  try{ history.replaceState(null,'',location.pathname+'?w='+wsId); }catch(e){}
+  if(OB&&OB.paid){ obFunnel(OB.questionnaireDone?'done':'quiz'); }
+  else { el.innerHTML=`<div class="center"><div class="card" style="max-width:460px;width:100%;text-align:center"><div class="heatrule" style="margin:0 auto 14px"></div><h2>We couldn't confirm payment yet</h2><p class="muted" style="font-size:13px">If you completed payment it may take a moment. You can retry below.</p><button class="btn" style="width:100%;margin-top:14px" onclick="App.obGo('pay')">Back to payment</button></div></div>`; }
+}
+
 /* ---------- customer ---------- */
 function activeCand(){return (WS.candidates||[]).find(c=>c.id===activeId);}
 function curMonth(){return new Date().toISOString().slice(0,7);}
@@ -252,9 +339,10 @@ function monthLabel(m){return new Date(m+'-01T00:00:00').toLocaleDateString('en-
 function customerApp(){
   const hdr=`<div class="sechdr"><div><div class="lab">Customer dashboard</div><h1 style="font-size:28px">${esc(WS.company||'Your team')}</h1></div>
     <div class="row"><button class="btn ghost sm" onclick="App.digest()">Email weekly digest</button><button class="btn ghost sm" onclick="App.addCand()">+ Add candidate</button></div></div>`;
-  const nav=`<div class="tabs" style="margin-bottom:14px"><button class="tab ${cView==='dashboard'?'on':''}" onclick="App.cView('dashboard')">Team dashboard</button><button class="tab ${cView==='commissions'?'on':''}" onclick="App.cView('commissions')">Commissions &amp; bonuses</button><button class="tab ${cView==='playbook'?'on':''}" onclick="App.cView('playbook')">90-day Playbook</button></div>`;
+  const nav=`<div class="tabs" style="margin-bottom:14px"><button class="tab ${cView==='dashboard'?'on':''}" onclick="App.cView('dashboard')">Team dashboard</button><button class="tab ${cView==='commissions'?'on':''}" onclick="App.cView('commissions')">Commissions &amp; bonuses</button><button class="tab ${cView==='onboarding'?'on':''}" onclick="App.cView('onboarding')">Client onboarding</button><button class="tab ${cView==='playbook'?'on':''}" onclick="App.cView('playbook')">90-day Playbook</button></div>`;
   if(cView==='playbook'){ el.innerHTML=hdr+nav+embedHTML('https://untapped-playbook.netlify.app/','The 90-day onboarding Playbook'); return; }
   if(cView==='commissions'){ el.innerHTML=hdr+nav+`<div id="comm"></div>`; renderCommissions(); return; }
+  if(cView==='onboarding'){ el.innerHTML=hdr+nav+`<div id="obadmin"></div>`; renderOnboardingAdmin(); return; }
   el.innerHTML=hdr+nav+`
     <p class="muted" style="max-width:640px">Oversight across your offshore team. Click a candidate to set KPIs &amp; approve time off, review progress, read their pulse &amp; blockers, and leave feedback.</p>
     <div class="roster" id="roster"></div>
@@ -262,6 +350,33 @@ function customerApp(){
   renderRoster(); renderDetail();
 }
 function commRow(x){return `<div class="item"><div class="row" style="justify-content:space-between;align-items:center"><div><b>£${(Number(x.amount)||0).toFixed(2)}</b> <span class="muted">· ${esc(x.type)} · ${esc(x.candidateName||'—')}</span>${x.note?`<div class="muted" style="font-size:13px">${esc(x.note)}</div>`:''}<div class="muted" style="font-size:12px">${monthLabel(x.month)}</div></div><button class="del" onclick="App.delComm('${x.id}')">✕</button></div>`;}
+function renderOnboardingAdmin(){
+  const o=WS.onboarding||{required:false,retainer:1000,status:'pending'};
+  const box=$('#obadmin');
+  const base=location.origin+location.pathname+'?w='+wsId;
+  const chip=(ok,label)=>`<span class="badge ${ok?'':'open'}" style="margin-right:6px">${ok?'✓':'○'} ${label}</span>`;
+  const sg=o.signed, pd=o.paid;
+  box.innerHTML=`
+    <p class="muted" style="max-width:640px">This gates the client's link: when switched on, anyone opening it must sign your terms, pay the retainer, and complete the kick-off questionnaire before the dashboard unlocks. You always get in with your customer PIN.</p>
+    <div class="card" style="margin-top:14px;max-width:640px">
+      <label class="row" style="align-items:center;gap:10px;cursor:pointer;font-size:15px"><input type="checkbox" id="ob_req" ${o.required?'checked':''} style="width:18px;height:18px"> <b>Require onboarding on this client's link</b></label>
+      <div class="grid2" style="margin-top:14px">
+        <div><label class="fl">Retainer amount (£)</label><input id="ob_ret" type="number" min="0" step="50" value="${Number(o.retainer)||1000}"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn sm" onclick="App.saveOnboarding()">Save settings</button></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px;max-width:640px">
+      <div class="lab">This client's progress</div>
+      <div style="margin:10px 0">${chip(!!sg,'Terms signed')}${chip(!!pd,'Retainer paid')}${chip(!!o.questionnaireDone,'Questionnaire')}</div>
+      ${sg?`<div class="muted" style="font-size:13px">Signed by <b>${esc(sg.name)}</b> on ${new Date(sg.ts).toLocaleString('en-GB')}${sg.ip?` · IP ${esc(sg.ip)}`:''}</div>`:'<div class="muted" style="font-size:13px">Not signed yet.</div>'}
+      ${pd?`<div class="muted" style="font-size:13px">Paid £${(Number(pd.amount)||0).toFixed(2)} on ${new Date(pd.ts).toLocaleString('en-GB')}</div>`:''}
+      <div class="share" style="margin-top:12px"><b>Client onboarding link:</b><br>${esc(base)}</div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn ghost sm" onclick="App.copy('${esc(base)}')">Copy link</button>
+        <button class="btn ghost sm" onclick="App.resetOnboarding()">Reset (let them redo it)</button>
+      </div>
+    </div>`;
+}
 function renderCommissions(){
   const list=WS.commissions||[]; const cands=WS.candidates||[]; const box=$('#comm');
   const opts=cands.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')||'<option value="">(no candidates)</option>';
@@ -476,6 +591,13 @@ const App={
   // commissions (customer)
   addComm:async()=>{const amount=$('#cm_a').value;if(!amount||Number(amount)<=0){$('#cm_err').textContent='Enter an amount greater than 0.';return;}const j=await api('addCommission',{candidateId:$('#cm_c').value,amount,type:$('#cm_t').value,note:$('#cm_n').value.trim(),month:$('#cm_m').value});if(j.ok){await refresh();renderCommissions();toast('Added');}else $('#cm_err').textContent=j.error||'Failed';},
   delComm:async(id)=>{const j=await api('deleteCommission',{commissionId:id});if(j.ok){await refresh();renderCommissions();toast('Removed');}},
+  saveOnboarding:async()=>{ const required=$('#ob_req').checked, retainer=$('#ob_ret').value; const j=await api('setOnboardingConfig',{required,retainer}); if(j.ok){await refresh();renderOnboardingAdmin();toast('Onboarding settings saved');} else toast(j.error||'Failed'); },
+  resetOnboarding:async()=>{ if(!confirm('Reset this client’s onboarding? They’ll need to sign, pay and complete the questionnaire again.'))return; const j=await api('resetOnboarding'); if(j.ok){await refresh();renderOnboardingAdmin();toast('Onboarding reset');} else toast(j.error||'Failed'); },
+  obGo:(s)=>obFunnel(s),
+  obStaff:()=>{ try{history.replaceState(null,'',location.pathname+'?w='+wsId);}catch(e){} unlock(); },
+  obSign:async()=>{ const name=$('#ob_name').value.trim(), agree=$('#ob_agree').checked, err=$('#ob_err'); if(name.length<2){err.textContent='Please enter your full name.';return;} if(!agree){err.textContent='Please tick the box to agree to the terms.';return;} err.textContent=''; const j=await api('submitSignature',{name}); if(j.ok){OB=j.onboarding;obFunnel('pay');} else err.textContent=j.error||'Could not save your signature.'; },
+  obPay:async()=>{ const err=$('#ob_err'); err.textContent='Opening secure payment…'; const j=await api('createCheckout'); if(j.ok&&j.url){ location.href=j.url; } else { err.textContent=j.error==='payment not configured'?'Payment isn’t switched on yet — please contact Untapped.':(j.error||'Could not start payment.'); } },
+  obQuizDone:async()=>{ const j=await api('markQuestionnaireDone'); if(j.ok){OB=j.onboarding;obFunnel('done');} else toast(j.error||'Failed'); },
 };
 /* live auto-refresh for the customer dashboard (every 30s, paused when tab hidden or editing) */
 async function autoTick(){
