@@ -120,9 +120,10 @@ exports.handler = async (event) => {
     const candId = uid();
     const ws = {
       id: wsId, company: b.company || '', customerEmail: b.customerEmail || '',
-      customerPin: String(b.customerPin), createdAt: new Date().toISOString(),
+      customerPin: String(b.customerPin), adminPin: /^\d{4}$/.test(String(b.adminPin)) ? String(b.adminPin) : null,
+      createdAt: new Date().toISOString(),
       commissions: [],
-      onboarding: { required: false, retainer: 1000, status: 'pending', signed: null, paid: null, questionnaireDone: false },
+      onboarding: { required: false, retainerPerHire: Number(b.retainerPerHire) || 1000, hires: Number(b.hires) || 1, status: 'pending', signed: null, paid: null, questionnaireDone: false },
       candidates: [{
         id: candId, name: b.candidate || 'Candidate', role: b.role || '',
         email: b.email || '', location: b.location || '', allowance: Number(b.allowance) || 20, timeoff: [],
@@ -138,12 +139,24 @@ exports.handler = async (event) => {
   const wsId = b.wsId; if (!wsId) return json(400, { error: 'missing wsId' });
   const ws = await store.get(wsId, { type: 'json' });
   if (!ws) return json(404, { error: 'not found' });
-  if (!ws.onboarding) ws.onboarding = { required: false, retainer: 1000, status: 'pending', signed: null, paid: null, questionnaireDone: false };
+  if (!ws.onboarding) ws.onboarding = {};
+  { // normalise/migrate onboarding shape (older records used a single `retainer`)
+    const o = ws.onboarding;
+    if (o.required == null) o.required = false;
+    if (o.retainerPerHire == null) o.retainerPerHire = Number(o.retainer) || 1000;
+    if (o.hires == null) o.hires = 1;
+    if (o.status == null) o.status = 'pending';
+    if (o.signed === undefined) o.signed = null;
+    if (o.paid === undefined) o.paid = null;
+    if (o.questionnaireDone == null) o.questionnaireDone = false;
+  }
 
   /* ---- PUBLIC onboarding funnel actions (no PIN — this layer sits in front of PIN entry) ---- */
   const obSave = async () => { await store.setJSON(wsId, ws); };
+  const obTotal = () => Math.max(0, (Number(ws.onboarding.retainerPerHire) || 0) * (Number(ws.onboarding.hires) || 1));
   const obPublic = () => ({
-    required: !!ws.onboarding.required, retainer: Number(ws.onboarding.retainer) || 1000,
+    required: !!ws.onboarding.required, retainerPerHire: Number(ws.onboarding.retainerPerHire) || 1000,
+    hires: Number(ws.onboarding.hires) || 1, retainerTotal: obTotal(),
     status: ws.onboarding.status || 'pending', company: ws.company || '',
     signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone
   });
@@ -164,7 +177,7 @@ exports.handler = async (event) => {
     const ip = (H['x-nf-client-connection-ip'] || (H['x-forwarded-for'] || '').split(',')[0] || '').trim();
     ws.onboarding.signed = { name, ip, ts: new Date().toISOString() };
     obRecompute(); await obSave();
-    const sBody = `<p style="font-size:15px;color:#333"><b>${esc(name)}</b> has signed the terms for <b>${esc(ws.company || 'a new client')}</b>.</p><p style="color:#777;font-size:13px">Signed ${new Date().toLocaleString('en-GB')} · IP ${esc(ip || 'n/a')}. Awaiting retainer payment (£${(Number(ws.onboarding.retainer) || 1000).toFixed(0)}).</p>`;
+    const sBody = `<p style="font-size:15px;color:#333"><b>${esc(name)}</b> has signed the terms for <b>${esc(ws.company || 'a new client')}</b>.</p><p style="color:#777;font-size:13px">Signed ${new Date().toLocaleString('en-GB')} · IP ${esc(ip || 'n/a')}. Awaiting retainer payment (£${obTotal().toFixed(0)}).</p>`;
     await mail(TEAM, `Terms signed — ${ws.company || 'new client'}`, emailWrap('Terms signed', sBody, ws, reqBase));
     return json(200, { ok: true, onboarding: obPublic() });
   }
@@ -173,7 +186,7 @@ exports.handler = async (event) => {
     if (!ws.onboarding.signed) return json(400, { error: 'please sign the terms first' });
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) return json(200, { ok: false, error: 'payment not configured' });
-    const amount = Math.round((Number(ws.onboarding.retainer) || 1000) * 100);
+    const amount = Math.round(obTotal() * 100);
     const base = reqBase.replace(/\/$/, '');
     const params = new URLSearchParams();
     params.append('mode', 'payment');
@@ -218,15 +231,29 @@ exports.handler = async (event) => {
     return json(200, { ok: true, onboarding: obPublic() });
   }
 
-  const isCustomer = String(b.pin) === ws.customerPin;
+  const isAdmin = ws.adminPin && String(b.pin) === String(ws.adminPin);
+  const isCustomer = !isAdmin && String(b.pin) === ws.customerPin;
   const candByPin = (ws.candidates || []).find(c => c.candidatePin === String(b.pin));
-  if (!isCustomer && !candByPin) return json(401, { error: 'incorrect pin' });
-  const role = isCustomer ? 'customer' : 'candidate';
+  if (!isAdmin && !isCustomer && !candByPin) return json(401, { error: 'incorrect pin' });
+  const isManager = isAdmin || isCustomer; // both can run the customer-side management actions
+  const role = isAdmin ? 'admin' : isCustomer ? 'customer' : 'candidate';
 
-  // GET — customer sees whole workspace; candidate sees only their own record
+  // Bootstrap / change the Untapped admin PIN. If none set yet, the customer can set one (one-time);
+  // once set, only the admin can change it. This keeps onboarding config out of clients' hands.
+  if (action === 'setAdminPin') {
+    if (ws.adminPin ? !isAdmin : !isCustomer) return json(403, { error: 'forbidden' });
+    if (!/^\d{4}$/.test(String(b.newAdminPin))) return json(400, { error: 'PIN must be 4 digits' });
+    if (String(b.newAdminPin) === ws.customerPin) return json(400, { error: 'Admin PIN must differ from the client PIN' });
+    ws.adminPin = String(b.newAdminPin); await obSave();
+    return json(200, { ok: true });
+  }
+
+  // GET — admin/customer see whole workspace; candidate sees only their own record
   if (action === 'get') {
-    if (isCustomer) {
-      const { customerPin, ...safe } = ws; // keep candidate pins so customer can share links
+    if (isManager) {
+      const { customerPin, ...safe } = ws; // keep candidate pins so manager can share links
+      if (!isAdmin) delete safe.adminPin; // never expose the admin PIN to a client
+      safe.hasAdminPin = !!ws.adminPin;
       return json(200, { ok: true, role, workspace: safe });
     }
     const { candidatePin, ...c } = candByPin;
@@ -236,7 +263,7 @@ exports.handler = async (event) => {
   const save = async () => { await store.setJSON(wsId, ws); };
 
   if (action === 'addCandidate') {
-    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (!isManager) return json(403, { error: 'forbidden' });
     if (!/^\d{4}$/.test(String(b.candidatePin))) return json(400, { error: 'PIN must be 4 digits' });
     const c = { id: uid(), name: b.name || 'Candidate', role: b.role || '', candidatePin: String(b.candidatePin),
       email: b.email || '', location: b.location || '', allowance: Number(b.allowance) || 20, timeoff: [],
@@ -246,7 +273,7 @@ exports.handler = async (event) => {
     return json(200, { ok: true, candidateId: c.id });
   }
   if (action === 'editCandidate') {
-    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (!isManager) return json(403, { error: 'forbidden' });
     const c = findCandidate(ws, b.candidateId); if (!c) return json(404, { error: 'candidate not found' });
     if (b.name != null) c.name = String(b.name);
     if (b.role != null) c.role = String(b.role);
@@ -256,19 +283,20 @@ exports.handler = async (event) => {
     await save(); return json(200, { ok: true });
   }
   if (action === 'setOnboardingConfig') {
-    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (!isAdmin) return json(403, { error: 'admin only' });
     if (b.required != null) ws.onboarding.required = !!b.required;
-    if (b.retainer != null) ws.onboarding.retainer = Math.max(0, Number(b.retainer) || 0);
+    if (b.retainerPerHire != null) ws.onboarding.retainerPerHire = Math.max(0, Number(b.retainerPerHire) || 0);
+    if (b.hires != null) ws.onboarding.hires = Math.max(1, Math.round(Number(b.hires) || 1));
     obRecompute(); await save();
-    return json(200, { ok: true, onboarding: { ...ws.onboarding } });
+    return json(200, { ok: true, onboarding: { ...ws.onboarding, retainerTotal: obTotal() } });
   }
   if (action === 'resetOnboarding') {
-    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (!isAdmin) return json(403, { error: 'admin only' });
     ws.onboarding.signed = null; ws.onboarding.paid = null; ws.onboarding.questionnaireDone = false; ws.onboarding.status = 'pending';
     await save(); return json(200, { ok: true });
   }
   if (action === 'addCommission') {
-    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (!isManager) return json(403, { error: 'forbidden' });
     ws.commissions = ws.commissions || [];
     const month = /^\d{4}-\d{2}$/.test(String(b.month)) ? b.month : new Date().toISOString().slice(0, 7);
     const entry = { id: uid(), candidateId: b.candidateId || '', candidateName: (findCandidate(ws, b.candidateId) || {}).name || '', amount: Math.max(0, Number(b.amount) || 0), type: b.type === 'Bonus' ? 'Bonus' : 'Commission', note: String(b.note || '').slice(0, 400), month, ts: new Date().toISOString() };
@@ -286,12 +314,12 @@ exports.handler = async (event) => {
     return json(200, { ok: true });
   }
   if (action === 'deleteCommission') {
-    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (!isManager) return json(403, { error: 'forbidden' });
     ws.commissions = (ws.commissions || []).filter(x => x.id !== b.commissionId);
     await save(); return json(200, { ok: true });
   }
   if (action === 'decideTimeoff') {
-    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (!isManager) return json(403, { error: 'forbidden' });
     const c = findCandidate(ws, b.candidateId); if (!c) return json(404, { error: 'candidate not found' });
     const r = (c.timeoff || []).find(x => x.id === b.requestId); if (!r) return json(404, { error: 'request not found' });
     if (!['approved', 'declined'].includes(b.status)) return json(400, { error: 'bad status' });
@@ -312,18 +340,18 @@ exports.handler = async (event) => {
     return json(200, { ok: true });
   }
   if (action === 'saveKpis') {
-    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (!isManager) return json(403, { error: 'forbidden' });
     const c = findCandidate(ws, b.candidateId); if (!c) return json(404, { error: 'candidate not found' });
     if (b.kpis) c.kpis = b.kpis; await save(); return json(200, { ok: true });
   }
   if (action === 'addKudos') {
-    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (!isManager) return json(403, { error: 'forbidden' });
     const c = findCandidate(ws, b.candidateId); if (!c) return json(404, { error: 'candidate not found' });
     c.kudos = c.kudos || []; c.kudos.unshift({ id: uid(), text: String(b.text || '').slice(0, 500), ts: new Date().toISOString() });
     await save(); return json(200, { ok: true });
   }
   if (action === 'digestNow') {
-    if (!isCustomer) return json(403, { error: 'forbidden' });
+    if (!isManager) return json(403, { error: 'forbidden' });
     const { RESEND_API_KEY, FROM_EMAIL } = process.env;
     if (!RESEND_API_KEY || !FROM_EMAIL || !ws.customerEmail) return json(200, { ok: false, note: 'email not configured' });
     try { await sendEmail(RESEND_API_KEY, { from: FROM_EMAIL, to: [ws.customerEmail], subject: `Weekly update — ${ws.company || 'your team'}`, html: digestHTML(ws, reqBase) }); return json(200, { ok: true }); }
