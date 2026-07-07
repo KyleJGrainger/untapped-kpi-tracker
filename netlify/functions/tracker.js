@@ -149,14 +149,18 @@ exports.handler = async (event) => {
     if (o.signed === undefined) o.signed = null;
     if (o.paid === undefined) o.paid = null;
     if (o.questionnaireDone == null) o.questionnaireDone = false;
+    if (o.region === undefined) o.region = null; // 'Philippines' | 'South Africa'
+    if (o.vat == null) o.vat = false; // add 20% VAT
   }
 
   /* ---- PUBLIC onboarding funnel actions (no PIN — this layer sits in front of PIN entry) ---- */
   const obSave = async () => { await store.setJSON(wsId, ws); };
-  const obTotal = () => Math.max(0, (Number(ws.onboarding.retainerPerHire) || 0) * (Number(ws.onboarding.hires) || 1));
+  const obBase = () => Math.max(0, (Number(ws.onboarding.retainerPerHire) || 0) * (Number(ws.onboarding.hires) || 1));
+  const obTotal = () => ws.onboarding.vat ? Math.round(obBase() * 1.2 * 100) / 100 : obBase();
   const obPublic = () => ({
     required: !!ws.onboarding.required, retainerPerHire: Number(ws.onboarding.retainerPerHire) || 1000,
-    hires: Number(ws.onboarding.hires) || 1, retainerTotal: obTotal(),
+    hires: Number(ws.onboarding.hires) || 1, retainerBase: obBase(), vat: !!ws.onboarding.vat, retainerTotal: obTotal(),
+    region: ws.onboarding.region || null,
     status: ws.onboarding.status || 'pending', company: ws.company || '',
     signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone
   });
@@ -287,6 +291,8 @@ exports.handler = async (event) => {
     if (b.required != null) ws.onboarding.required = !!b.required;
     if (b.retainerPerHire != null) ws.onboarding.retainerPerHire = Math.max(0, Number(b.retainerPerHire) || 0);
     if (b.hires != null) ws.onboarding.hires = Math.max(1, Math.round(Number(b.hires) || 1));
+    if (b.vat != null) ws.onboarding.vat = !!b.vat;
+    if (b.region !== undefined) ws.onboarding.region = ['Philippines', 'South Africa'].includes(b.region) ? b.region : null;
     obRecompute(); await save();
     return json(200, { ok: true, onboarding: { ...ws.onboarding, retainerTotal: obTotal() } });
   }
