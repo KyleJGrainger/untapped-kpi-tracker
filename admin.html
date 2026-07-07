@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Untapped — Admin Console</title>
+<style>
+  :root{--ink:#101820;--bg:#0f1116;--panel:#161a22;--line:#272c37;--muted:#8b8f9a;--red:#DA291C;--org:#FF6900;--yel:#FFC600;--grn:#34c759}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#eef0f3;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5}
+  .top{background:var(--ink);padding:16px 26px;display:flex;align-items:center;justify-content:space-between}
+  .top .brand{color:#fff;font-weight:700;font-size:20px;letter-spacing:.02em}
+  .top .brand span{color:var(--org)}
+  .top .lab{color:var(--muted);font-size:12px;letter-spacing:.16em;text-transform:uppercase;margin-left:10px}
+  .heatrule{height:4px;background:linear-gradient(90deg,var(--yel),var(--org),var(--red))}
+  .wrap{max-width:960px;margin:0 auto;padding:26px}
+  h1{font-family:'Iowan Old Style',Georgia,serif;font-weight:600}
+  .center{min-height:70vh;display:flex;align-items:center;justify-content:center}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+  label.fl{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:14px 0 5px}
+  input,select{width:100%;background:#0d0f14;border:1px solid var(--line);border-radius:9px;color:#fff;padding:11px 12px;font-size:15px}
+  .pin{letter-spacing:.4em;text-align:center;font-size:20px}
+  .btn{background:#fff;color:#101820;border:0;border-radius:9px;padding:12px 18px;font-weight:700;font-size:15px;cursor:pointer}
+  .btn.dark{background:var(--ink);color:#fff}
+  .btn.sm{padding:8px 12px;font-size:13px}
+  .btn.ghost{background:transparent;color:#eef0f3;border:1px solid var(--line)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .err{color:#ff6b6b;font-size:13px;margin:8px 0;min-height:16px}
+  .muted{color:var(--muted)}
+  .tabs{display:flex;gap:6px;margin:18px 0}
+  .tab{background:transparent;border:0;color:var(--muted);font-size:15px;padding:8px 4px;margin-right:18px;cursor:pointer;border-bottom:2px solid transparent}
+  .tab.on{color:#fff;border-bottom-color:var(--yel)}
+  .month{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  .client{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .client b{font-size:16px}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .b-sent{background:rgba(218,41,28,.16);color:#ff8a80}
+  .b-mid{background:rgba(255,105,0,.16);color:#ffb27a}
+  .b-active{background:rgba(52,199,89,.16);color:#7ee2a0}
+  .share{background:#0d0f14;border:1px dashed var(--line);border-radius:9px;padding:10px 12px;font-size:13px;word-break:break-all;margin-top:8px}
+  .empty{color:var(--muted);padding:20px;text-align:center}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#fff;color:#101820;padding:10px 18px;border-radius:8px;font-weight:600;opacity:0;transition:.2s;pointer-events:none}
+  .toast.on{opacity:1}
+</style></head>
+<body>
+<div class="top"><div><span class="brand">untapp<span>e</span>d</span><span class="lab">Admin Console</span></div><div id="topr"></div></div>
+<div class="heatrule"></div>
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast"></div>
+<script>
+const EP='/api/tracker';
+let KEY=null;
+const $=s=>document.querySelector(s);
+const el=$('#app');
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),1800);}
+async function api(action,extra){const r=await fetch(EP,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,adminKey:KEY,...(extra||{})})});let j={};try{j=await r.json()}catch(e){}if(!r.ok)j.error=j.error||('HTTP '+r.status);return j;}
+function copy(t){navigator.clipboard&&navigator.clipboard.writeText(t);toast('Copied');}
+
+const STAGES={ 'sent':['Awaiting signature','b-sent'], 'paid':['Signed · awaiting payment','b-mid'], 'questionnaire':['Paid · awaiting questionnaire','b-mid'], 'booked':['Awaiting kick-off booking','b-mid'], 'shortlist':['Shortlist stage','b-mid'], 'workorder':['Awaiting Work Order','b-mid'], 'directdebit':['Awaiting Direct Debit','b-mid'], 'active':['Active','b-active'], 'no-onboarding':['No onboarding','b-mid'] };
+
+async function init(){
+  let s=null; try{s=sessionStorage.getItem('untapped_admin_key')}catch(e){}
+  const st=await api('adminStatus');
+  if(!st.setup){ return bootstrapView(); }
+  if(s){ KEY=s; const chk=await api('adminStatus'); if(chk.authed){ return console_(); } KEY=null; }
+  keyView();
+}
+function bootstrapView(){
+  $('#topr').innerHTML='';
+  el.innerHTML=`<div class="center"><div class="card" style="max-width:420px;width:100%">
+    <div class="lab" style="color:var(--muted);font-size:12px;letter-spacing:.14em;text-transform:uppercase">First-time setup</div>
+    <h1 style="font-size:23px;margin:6px 0 10px">Create your admin PIN</h1>
+    <p class="muted" style="font-size:14px">Set a private PIN for you and your VA. You'll use it to open this console. Keep it separate from client PINs.</p>
+    <label class="fl">Admin PIN (4–8 digits)</label><input id="bk" class="pin" maxlength="8" inputmode="numeric" placeholder="••••">
+    <div class="err" id="be"></div>
+    <button class="btn" style="width:100%" onclick="doBootstrap()">Set admin PIN →</button>
+  </div></div>`;
+}
+async function doBootstrap(){const v=$('#bk').value.trim();if(!/^\d{4,8}$/.test(v)){$('#be').textContent='4–8 digits.';return;}const j=await api('adminBootstrap',{adminKey:v});if(j.ok){KEY=v;try{sessionStorage.setItem('untapped_admin_key',v)}catch(e){}console_();}else $('#be').textContent=j.error||'Failed';}
+function keyView(){
+  $('#topr').innerHTML='';
+  el.innerHTML=`<div class="center"><div class="card" style="max-width:380px;width:100%;text-align:center">
+    <h1 style="font-size:22px;margin:0 0 10px">Admin sign-in</h1>
+    <p class="muted" style="font-size:13px">Enter your Untapped admin PIN.</p>
+    <input id="k" class="pin" maxlength="8" inputmode="numeric" placeholder="••••" style="margin-top:12px">
+    <div class="err" id="ke"></div>
+    <button class="btn" style="width:100%" onclick="doKey()">Unlock →</button>
+  </div></div>`;
+  const k=$('#k');k.focus();k.addEventListener('keydown',e=>{if(e.key==='Enter')doKey();});
+}
+async function doKey(){KEY=$('#k').value.trim();const j=await api('adminStatus');if(j.authed){try{sessionStorage.setItem('untapped_admin_key',KEY)}catch(e){}console_();}else{KEY=null;$('#ke').textContent='Incorrect PIN.';}}
+
+let view='clients';
+function console_(){
+  $('#topr').innerHTML=`<button class="btn ghost sm" onclick="lock()">Lock</button>`;
+  el.innerHTML=`<div class="row" style="justify-content:space-between">
+      <div class="tabs"><button class="tab ${view==='clients'?'on':''}" onclick="go('clients')">Clients</button><button class="tab ${view==='new'?'on':''}" onclick="go('new')">+ New client</button></div>
+    </div><div id="body"></div>`;
+  if(view==='new') newClientForm(); else clientsView();
+}
+function go(v){view=v;console_();}
+function lock(){KEY=null;try{sessionStorage.removeItem('untapped_admin_key')}catch(e){}keyView();$('#topr').innerHTML='';}
+
+function monthKey(iso){const d=new Date(iso);return isNaN(d)?'Unknown':d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});}
+async function clientsView(){
+  const box=$('#body');box.innerHTML='<div class="empty">Loading…</div>';
+  const j=await api('adminList');
+  if(!j.ok){box.innerHTML='<div class="empty">'+(j.error||'Failed to load')+'</div>';return;}
+  const cl=j.clients||[];
+  const outstanding=cl.filter(c=>c.required&&!c.signed).length;
+  if(!cl.length){box.innerHTML='<div class="empty">No clients yet. Use “+ New client” to set one up.</div>';return;}
+  // group by month sent
+  const groups={};
+  cl.forEach(c=>{const m=monthKey(c.sentAt);(groups[m]=groups[m]||[]).push(c);});
+  let html=`<p class="muted" style="font-size:14px;margin:4px 0 8px"><b style="color:#fff">${cl.length}</b> client${cl.length===1?'':'s'} · <b style="color:#ff8a80">${outstanding}</b> outstanding MSA${outstanding===1?'':'s'} (sent, not yet signed)</p>`;
+  Object.keys(groups).forEach(m=>{
+    html+=`<div class="month">Sent · ${m}</div>`;
+    groups[m].forEach(c=>{
+      const st=STAGES[c.stage]||['—','b-mid'];
+      const base=location.origin+'/?w='+c.id;
+      html+=`<div class="client"><div>
+          <b>${esc(c.company||'—')}</b> <span class="muted">· ${esc(c.region||'no region')} · £${(c.retainerTotal||0).toFixed(0)}</span>
+          ${c.signed?`<div class="muted" style="font-size:12px;margin-top:3px">MSA signed by ${esc(c.signed.name)} on ${new Date(c.signed.ts).toLocaleDateString('en-GB')}</div>`:`<div class="muted" style="font-size:12px;margin-top:3px">MSA not signed yet</div>`}
+        </div>
+        <div class="row"><span class="badge ${st[1]}">${st[0]}</span><button class="btn ghost sm" onclick="copy('${base}')">Copy link</button></div>
+      </div>`;
+    });
+  });
+  box.innerHTML=html;
+}
+
+function newClientForm(){
+  $('#body').innerHTML=`<div class="card" style="max-width:560px">
+    <h1 style="font-size:22px;margin:0 0 4px">Set up a new client</h1>
+    <p class="muted" style="font-size:13px">This creates their onboarding link, picks the right MSA + kick-off call by region, and sets the retainer. Send them the link at the end.</p>
+    <label class="fl">Client company name</label><input id="c_co" placeholder="e.g. Acme Ltd">
+    <label class="fl">Client email</label><input id="c_em" type="email" placeholder="ops@acme.com">
+    <label class="fl">Region (sets the MSA &amp; kick-off call)</label>
+    <select id="c_rg"><option value="">— choose —</option><option value="Philippines">Philippines</option><option value="South Africa">South Africa</option></select>
+    <div class="grid2">
+      <div><label class="fl">Retainer per hire (£)</label><input id="c_ret" type="number" min="0" step="50" value="1000" oninput="prev()"></div>
+      <div><label class="fl">Number of hires</label><input id="c_h" type="number" min="1" step="1" value="1" oninput="prev()"></div>
+    </div>
+    <label class="row" style="align-items:center;gap:10px;margin-top:12px;cursor:pointer;font-size:15px"><input type="checkbox" id="c_vat" style="width:18px;height:18px" onchange="prev()"> Add VAT (20%)</label>
+    <div style="margin-top:12px;font-size:15px">Retainer charged: <b id="c_tot">£1000</b></div>
+    <div class="err" id="c_err"></div>
+    <button class="btn" style="margin-top:6px" onclick="createClient()">Create client &amp; link →</button>
+  </div>`;
+}
+function prev(){const p=Number($('#c_ret').value)||0,h=Math.max(1,Number($('#c_h').value)||1),v=$('#c_vat').checked;$('#c_tot').textContent='£'+((v?p*h*1.2:p*h)).toFixed(0);}
+async function createClient(){
+  const company=$('#c_co').value.trim(),customerEmail=$('#c_em').value.trim(),region=$('#c_rg').value,retainerPerHire=$('#c_ret').value,hires=$('#c_h').value,vat=$('#c_vat').checked,err=$('#c_err');
+  if(!company){err.textContent='Enter the client company name.';return;}
+  if(!region){err.textContent='Choose a region.';return;}
+  const j=await api('adminCreateClient',{company,customerEmail,region,retainerPerHire,hires,vat});
+  if(!j.ok){err.textContent=j.error||'Failed';return;}
+  const link=location.origin+'/?w='+j.wsId;
+  $('#body').innerHTML=`<div class="card" style="max-width:560px">
+    <h1 style="font-size:22px;margin:0 0 6px">${esc(company)} is set up ✓</h1>
+    <p class="muted" style="font-size:14px">Send this link to the client — it opens their branded onboarding (sign the ${esc(region)} MSA → pay → questionnaire → book kick-off call).</p>
+    <div class="share"><b>Client onboarding link:</b><br>${esc(link)}</div>
+    <div class="grid2" style="margin-top:12px">
+      <div class="share"><b>Client PIN</b><br>${esc(j.clientPin)} <span class="muted">— their dashboard, after onboarding</span></div>
+      <div class="share"><b>Candidate PIN</b><br>${esc(j.candidatePin)} <span class="muted">— the hire logs progress</span></div>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button class="btn" onclick="copy('${link}')">Copy link</button>
+      <button class="btn ghost" onclick="go('clients')">Back to clients</button>
+    </div>
+  </div>`;
+}
+init();
+</script>
+</body></html>
