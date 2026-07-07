@@ -173,6 +173,11 @@ exports.handler = async (event) => {
     cfg.adminKey = String(b.adminKey); await store.setJSON('__config', cfg);
     return json(200, { ok: true });
   }
+  if (action === 'adminResetKey') { // TEMPORARY one-time reset — remove after use
+    if (String(b.confirm) !== 'RESET-ADMIN-UNTAPPED-2026') return json(403, { error: 'forbidden' });
+    try { await store.delete('__config'); } catch (e) {}
+    return json(200, { ok: true, reset: true });
+  }
   const adminAuthed = async () => {
     const cfg = await store.get('__config', { type: 'json' });
     return !!(cfg && cfg.adminKey && String(b.adminKey || '') === String(cfg.adminKey));
