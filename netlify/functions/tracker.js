@@ -224,6 +224,15 @@ exports.handler = async (event) => {
     await store.setJSON(wsId, ws);
     return json(200, { ok: true, wsId, clientPin, candidatePin });
   }
+  if (action === 'adminDeleteClient') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const w = await store.get(b.wsId, { type: 'json' });
+    if (w && w.onboarding && Array.isArray(w.onboarding.shortlist)) {
+      for (const c of w.onboarding.shortlist) { try { await store.delete('cv:' + b.wsId + ':' + c.id); } catch (e) {} }
+    }
+    await store.delete(b.wsId);
+    return json(200, { ok: true, deleted: true });
+  }
   // ---- Admin: manage a specific client's candidate shortlist ----
   if (action === 'adminGetClient' || action === 'adminAddCandidate' || action === 'adminUpdateCandidate'
       || action === 'adminRemoveCandidate' || action === 'adminUploadCV' || action === 'adminSetHired' || action === 'adminSaveWorkOrder'
