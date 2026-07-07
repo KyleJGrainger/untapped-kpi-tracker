@@ -270,11 +270,7 @@ function obStepper(active){
   }).join('<span style="color:rgba(255,255,255,.2)">—</span>')}</div>`;
 }
 function obStaffLink(){ return `<p class="muted" style="font-size:12px;margin-top:16px;text-align:center">Untapped staff or already onboarded? <a href="#" onclick="App.obStaff();return false" style="color:var(--muted);text-decoration:underline">Enter PIN</a></p>`; }
-function msaText(region){
-  if(region==='Philippines'){ return `<b style="color:#fff">Untapped — Master Services Agreement (Philippines)</b><br><br>[PLACEHOLDER — paste your Philippines MSA here.] This agreement governs the engagement between Untapped and the client for talent placed in the Philippines.<br><br>1. Scope of services. [PLACEHOLDER]<br><br>2. Retainer &amp; fees. [PLACEHOLDER]<br><br>3. Confidentiality. [PLACEHOLDER]<br><br>4. Term &amp; termination. [PLACEHOLDER]<br><br>5. Liability. [PLACEHOLDER]`; }
-  if(region==='South Africa'){ return `<b style="color:#fff">Untapped — Master Services Agreement (South Africa)</b><br><br>[PLACEHOLDER — paste your South Africa MSA here.] This agreement governs the engagement between Untapped and the client for talent placed in South Africa.<br><br>1. Scope of services. [PLACEHOLDER]<br><br>2. Retainer &amp; fees. [PLACEHOLDER]<br><br>3. Confidentiality. [PLACEHOLDER]<br><br>4. Term &amp; termination. [PLACEHOLDER]<br><br>5. Liability. [PLACEHOLDER]`; }
-  return `<b style="color:#fff">Untapped — Master Services Agreement</b><br><br>[PLACEHOLDER terms.] By typing your name and ticking the box you agree to these terms on behalf of your company.`;
-}
+function msaSrc(region){ return region==='Philippines'?'msa-philippines.html':region==='South Africa'?'msa-south-africa.html':''; }
 function obFunnel(step){
   const co=(OB&&OB.company)||'Untapped';
   const perHire=(OB&&OB.retainerPerHire)||1000, hires=(OB&&OB.hires)||1;
@@ -294,9 +290,10 @@ function obFunnel(step){
     el.innerHTML=`<div class="center"><div class="card" style="max-width:620px;width:100%">
       <div class="heatrule"></div>${obStepper('terms')}
       <h1 style="font-size:24px">Review &amp; sign our agreement</h1>
-      <div style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0;font-size:13px;line-height:1.6;color:var(--muted)">
-        ${msaText(region)}<br><br>By typing your name and ticking the box you agree to this agreement on behalf of your company.
-      </div>
+      ${msaSrc(region)
+        ? `<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:12px 0;height:340px;background:#fff"><iframe src="${msaSrc(region)}" style="width:100%;height:100%;border:0" title="Master Services Agreement"></iframe></div>
+      <p class="muted" style="font-size:12px;margin:0 0 10px">Scroll to review the full Master Services Agreement above. By typing your name and ticking the box, you agree to it on behalf of your company.</p>`
+        : `<div style="border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0;color:var(--muted);font-size:13px">Your agreement will appear here. Please contact Untapped — the agreement region hasn't been set for your account yet.</div>`}
       <label class="fl">Full name</label><input id="ob_name" placeholder="e.g. Jane Smith">
       <label class="row" style="align-items:center;gap:10px;margin-top:12px;cursor:pointer;font-size:14px"><input type="checkbox" id="ob_agree" style="width:18px;height:18px"> I have read and agree to the terms above.</label>
       <div class="err" id="ob_err"></div>
