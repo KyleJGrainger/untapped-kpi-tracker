@@ -14,6 +14,16 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 
 /* ---- Time Off: team recipients + 2026 public holidays (excluded from allowance) ---- */
 const TEAM = ['kyle@tryuntapped.com', 'Nina@tryuntapped.com', 'pau@tryuntapped.com'];
+const VA = 'pau@tryuntapped.com';
+const DELIVERY = { 'South Africa': 'Ruan.Stander@tryuntapped.com', 'Philippines': 'Diana@tryuntapped.com' };
+const KICKOFF = { 'South Africa': 'https://my.recruitwithatlas.com/tryuntappedcom/Ruan-Stander/Kickoff-Call', 'Philippines': 'https://my.recruitwithatlas.com/tryuntappedcom/Diana-Rose-Ariaso/Kickoff-Call' };
+// Cost engine: total monthly £ the client sees = salary + service charge % + fixed EOR/payroll fee.
+function costOf(salary, region) {
+  const s = Math.max(0, Number(salary) || 0);
+  if (region === 'South Africa') return { pct: 0.25, fee: 325, feeLabel: 'EOR', total: s * 1.25 + 325 };
+  if (region === 'Philippines') return { pct: 0.35, fee: 150, feeLabel: 'Payroll', total: s * 1.35 + 150 };
+  return { pct: 0, fee: 0, feeLabel: '', total: s };
+}
 const HOLIDAYS = {
   'South Africa': { '2026-01-01':"New Year's Day",'2026-03-21':'Human Rights Day','2026-04-03':'Good Friday','2026-04-06':'Family Day','2026-04-27':'Freedom Day','2026-05-01':"Workers' Day",'2026-06-16':'Youth Day','2026-08-10':"National Women's Day (observed)",'2026-09-24':'Heritage Day','2026-12-16':'Day of Reconciliation','2026-12-25':'Christmas Day','2026-12-26':'Day of Goodwill' },
   'Philippines': { '2026-01-01':"New Year's Day",'2026-02-17':'Chinese New Year','2026-04-02':'Maundy Thursday','2026-04-03':'Good Friday','2026-04-04':'Black Saturday','2026-04-09':'Araw ng Kagitingan','2026-05-01':'Labor Day','2026-06-12':'Independence Day','2026-08-21':'Ninoy Aquino Day','2026-08-31':'National Heroes Day','2026-11-01':"All Saints' Day",'2026-11-30':'Bonifacio Day','2026-12-08':'Immaculate Conception','2026-12-25':'Christmas Day','2026-12-30':'Rizal Day','2026-12-31':'Last Day of the Year' }
@@ -214,6 +224,52 @@ exports.handler = async (event) => {
     await store.setJSON(wsId, ws);
     return json(200, { ok: true, wsId, clientPin, candidatePin });
   }
+  // ---- Admin: manage a specific client's candidate shortlist ----
+  if (action === 'adminGetClient' || action === 'adminAddCandidate' || action === 'adminUpdateCandidate'
+      || action === 'adminRemoveCandidate' || action === 'adminUploadCV') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'client not found' });
+    w.onboarding = w.onboarding || {}; if (!Array.isArray(w.onboarding.shortlist)) w.onboarding.shortlist = [];
+    const region = w.onboarding.region;
+    const saveW = async () => { await store.setJSON(b.wsId, w); };
+    if (action === 'adminGetClient') {
+      const o = w.onboarding;
+      return json(200, { ok: true, client: {
+        id: w.id, company: w.company, region, customerEmail: w.customerEmail || '',
+        retainerPerHire: o.retainerPerHire, hires: o.hires, vat: !!o.vat,
+        signed: o.signed || null, paid: o.paid || null, questionnaireDone: !!o.questionnaireDone,
+        booked: o.booked || null, hired: o.hired || null, woDone: o.woDone || null, ddDone: o.ddDone || null,
+        shortlist: (o.shortlist || []).map(c => { const k = costOf(c.salary, region); return {
+          id: c.id, name: c.name, commentary: c.commentary || '', salary: Number(c.salary) || 0, hasCV: !!c.hasCV,
+          pct: k.pct, fee: k.fee, feeLabel: k.feeLabel, totalCost: k.total, requests: c.requests || [] }; })
+      }});
+    }
+    if (action === 'adminAddCandidate') {
+      const c = { id: uid(), name: String(b.name || 'Candidate').trim(), commentary: String(b.commentary || '').slice(0, 600), salary: Math.max(0, Number(b.salary) || 0), hasCV: false, requests: [], ts: new Date().toISOString() };
+      w.onboarding.shortlist.push(c); await saveW();
+      return json(200, { ok: true, candidateId: c.id });
+    }
+    if (action === 'adminUpdateCandidate') {
+      const c = w.onboarding.shortlist.find(x => x.id === b.candidateId); if (!c) return json(404, { error: 'candidate not found' });
+      if (b.name != null) c.name = String(b.name).trim();
+      if (b.commentary != null) c.commentary = String(b.commentary).slice(0, 600);
+      if (b.salary != null) c.salary = Math.max(0, Number(b.salary) || 0);
+      await saveW(); return json(200, { ok: true });
+    }
+    if (action === 'adminRemoveCandidate') {
+      w.onboarding.shortlist = w.onboarding.shortlist.filter(x => x.id !== b.candidateId);
+      await saveW(); try { await store.delete('cv:' + b.wsId + ':' + b.candidateId); } catch (e) {}
+      return json(200, { ok: true });
+    }
+    if (action === 'adminUploadCV') {
+      const c = w.onboarding.shortlist.find(x => x.id === b.candidateId); if (!c) return json(404, { error: 'candidate not found' });
+      const data = String(b.dataBase64 || '');
+      if (!data || data.length > 8 * 1024 * 1024) return json(400, { error: 'missing or oversized file (max ~6MB)' });
+      await store.set('cv:' + b.wsId + ':' + b.candidateId, data);
+      c.hasCV = true; await saveW();
+      return json(200, { ok: true });
+    }
+  }
 
   const wsId = b.wsId; if (!wsId) return json(400, { error: 'missing wsId' });
   const ws = await store.get(wsId, { type: 'json' });
@@ -230,6 +286,11 @@ exports.handler = async (event) => {
     if (o.questionnaireDone == null) o.questionnaireDone = false;
     if (o.region === undefined) o.region = null; // 'Philippines' | 'South Africa'
     if (o.vat == null) o.vat = false; // add 20% VAT
+    if (o.booked === undefined) o.booked = null;   // kick-off call booked
+    if (o.hired === undefined) o.hired = null;     // client hired a candidate
+    if (o.woDone === undefined) o.woDone = null;   // Work Order complete
+    if (o.ddDone === undefined) o.ddDone = null;   // Direct Debit set up
+    if (!Array.isArray(o.shortlist)) o.shortlist = []; // presented candidates
   }
 
   /* ---- PUBLIC onboarding funnel actions (no PIN — this layer sits in front of PIN entry) ---- */
@@ -239,9 +300,15 @@ exports.handler = async (event) => {
   const obPublic = () => ({
     required: !!ws.onboarding.required, retainerPerHire: Number(ws.onboarding.retainerPerHire) || 1000,
     hires: Number(ws.onboarding.hires) || 1, retainerBase: obBase(), vat: !!ws.onboarding.vat, retainerTotal: obTotal(),
-    region: ws.onboarding.region || null,
+    region: ws.onboarding.region || null, kickoffUrl: KICKOFF[ws.onboarding.region] || '',
     status: ws.onboarding.status || 'pending', company: ws.company || '',
-    signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone
+    signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone,
+    booked: !!ws.onboarding.booked, hired: !!ws.onboarding.hired, woDone: !!ws.onboarding.woDone, ddDone: !!ws.onboarding.ddDone,
+    // client-safe shortlist — total cost only, never the salary or the workings
+    shortlist: (ws.onboarding.shortlist || []).map(c => ({
+      id: c.id, name: c.name || '', commentary: c.commentary || '', hasCV: !!c.hasCV,
+      totalCost: costOf(c.salary, ws.onboarding.region).total, requests: c.requests || []
+    }))
   });
   const obRecompute = () => {
     const o = ws.onboarding;
@@ -312,6 +379,41 @@ exports.handler = async (event) => {
     ws.onboarding.questionnaireDone = true; ws.onboarding.questionnaireTs = new Date().toISOString();
     obRecompute(); await obSave();
     return json(200, { ok: true, onboarding: obPublic() });
+  }
+  if (action === 'markBooked') {
+    if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
+    if (!ws.onboarding.questionnaireDone) return json(400, { error: 'complete the questionnaire first' });
+    ws.onboarding.booked = { ts: new Date().toISOString() };
+    obRecompute(); await obSave();
+    const region = ws.onboarding.region;
+    const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has booked their kick-off call.</p><p style="color:#777;font-size:13px">Region: ${esc(region || '—')}. Time to prepare their candidate shortlist.</p>`;
+    await mail([...TEAM, DELIVERY[region]].filter(Boolean), `Kick-off booked — ${ws.company || 'client'}`, emailWrap('Kick-off call booked', body, ws, reqBase));
+    return json(200, { ok: true, onboarding: obPublic() });
+  }
+  if (action === 'shortlistAction') {
+    if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
+    const c = (ws.onboarding.shortlist || []).find(x => x.id === b.candidateId);
+    if (!c) return json(404, { error: 'candidate not found' });
+    const acts = { interview: 'Interview requested', second: '2nd interview requested', offer: 'Offer requested' };
+    if (!acts[b.act]) return json(400, { error: 'unknown action' });
+    c.requests = c.requests || [];
+    c.requests.push({ act: b.act, label: acts[b.act], ts: new Date().toISOString() });
+    await obSave();
+    const region = ws.onboarding.region;
+    const to = [...TEAM, DELIVERY[region]].filter(Boolean);
+    const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> — <b>${esc(acts[b.act])}</b> for candidate <b>${esc(c.name || '—')}</b>.</p><p style="color:#777;font-size:13px">Region: ${esc(region || '—')}.</p>`;
+    await mail(to, `${acts[b.act]} — ${c.name || 'candidate'} (${ws.company || 'client'})`, emailWrap(acts[b.act], body, ws, reqBase));
+    return json(200, { ok: true, onboarding: obPublic() });
+  }
+  if (action === 'requestCheckin') {
+    if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
+    const region = ws.onboarding.region;
+    const to = [DELIVERY[region], VA].filter(Boolean);
+    if (!to.length) return json(400, { error: 'no delivery lead for region' });
+    const note = String(b.note || '').slice(0, 500);
+    const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has requested a check-in with the delivery lead.</p>${note ? `<p style="color:#333">“${esc(note)}”</p>` : ''}<p style="color:#777;font-size:13px">Region: ${esc(region || '—')}.</p>`;
+    await mail(to, `Check-in requested — ${ws.company || 'client'} (${region || '—'})`, emailWrap('Check-in requested', body, ws, reqBase));
+    return json(200, { ok: true });
   }
 
   const isAdmin = ws.adminPin && String(b.pin) === String(ws.adminPin);
