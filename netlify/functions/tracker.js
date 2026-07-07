@@ -226,7 +226,7 @@ exports.handler = async (event) => {
   }
   // ---- Admin: manage a specific client's candidate shortlist ----
   if (action === 'adminGetClient' || action === 'adminAddCandidate' || action === 'adminUpdateCandidate'
-      || action === 'adminRemoveCandidate' || action === 'adminUploadCV') {
+      || action === 'adminRemoveCandidate' || action === 'adminUploadCV' || action === 'adminSetHired' || action === 'adminSaveWorkOrder') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'client not found' });
     w.onboarding = w.onboarding || {}; if (!Array.isArray(w.onboarding.shortlist)) w.onboarding.shortlist = [];
@@ -239,10 +239,30 @@ exports.handler = async (event) => {
         retainerPerHire: o.retainerPerHire, hires: o.hires, vat: !!o.vat,
         signed: o.signed || null, paid: o.paid || null, questionnaireDone: !!o.questionnaireDone,
         booked: o.booked || null, hired: o.hired || null, woDone: o.woDone || null, ddDone: o.ddDone || null,
+        workOrder: o.workOrder || null,
         shortlist: (o.shortlist || []).map(c => { const k = costOf(c.salary, region); return {
           id: c.id, name: c.name, commentary: c.commentary || '', salary: Number(c.salary) || 0, hasCV: !!c.hasCV,
           pct: k.pct, fee: k.fee, feeLabel: k.feeLabel, totalCost: k.total, requests: c.requests || [] }; })
       }});
+    }
+    if (action === 'adminSetHired') {
+      const c = w.onboarding.shortlist.find(x => x.id === b.candidateId); if (!c) return json(404, { error: 'candidate not found' });
+      w.onboarding.hired = { candidateId: c.id, name: c.name, salary: Number(c.salary) || 0, ts: new Date().toISOString() };
+      // seed the Work Order's Untapped-side fields from the hire
+      w.onboarding.workOrder = Object.assign({ employeeName: c.name, jobTitle: '', startDate: '', grossSalaryMonthly: Number(c.salary) || 0,
+        annualLeaveDays: 15, sickLeaveDays: 12, commissionDetails: '', jobDescription: '', noticePeriod: '1 Calendar Month', costNote: '',
+        client: {}, signed: null }, w.onboarding.workOrder || {});
+      await saveW();
+      return json(200, { ok: true });
+    }
+    if (action === 'adminSaveWorkOrder') {
+      w.onboarding.workOrder = w.onboarding.workOrder || { client: {}, signed: null };
+      const f = b.wo || {}; const wo = w.onboarding.workOrder;
+      ['employeeName','jobTitle','startDate','commissionDetails','jobDescription','noticePeriod','costNote'].forEach(k => { if (f[k] != null) wo[k] = String(f[k]); });
+      if (f.grossSalaryMonthly != null) wo.grossSalaryMonthly = Math.max(0, Number(f.grossSalaryMonthly) || 0);
+      if (f.annualLeaveDays != null) wo.annualLeaveDays = Math.max(0, Number(f.annualLeaveDays) || 0);
+      if (f.sickLeaveDays != null) wo.sickLeaveDays = Math.max(0, Number(f.sickLeaveDays) || 0);
+      await saveW(); return json(200, { ok: true });
     }
     if (action === 'adminAddCandidate') {
       const c = { id: uid(), name: String(b.name || 'Candidate').trim(), commentary: String(b.commentary || '').slice(0, 600), salary: Math.max(0, Number(b.salary) || 0), hasCV: false, requests: [], ts: new Date().toISOString() };
@@ -304,6 +324,18 @@ exports.handler = async (event) => {
     status: ws.onboarding.status || 'pending', company: ws.company || '',
     signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone,
     booked: !!ws.onboarding.booked, hired: !!ws.onboarding.hired, woDone: !!ws.onboarding.woDone, ddDone: !!ws.onboarding.ddDone,
+    hiredName: (ws.onboarding.hired || {}).name || '',
+    // Work Order — the Untapped-filled parts the client reviews before adding their own details + signing
+    workOrder: ws.onboarding.workOrder ? {
+      employeeName: ws.onboarding.workOrder.employeeName || '', jobTitle: ws.onboarding.workOrder.jobTitle || '',
+      startDate: ws.onboarding.workOrder.startDate || '', grossSalaryMonthly: Number(ws.onboarding.workOrder.grossSalaryMonthly) || 0,
+      annualLeaveDays: ws.onboarding.workOrder.annualLeaveDays, sickLeaveDays: ws.onboarding.workOrder.sickLeaveDays,
+      commissionDetails: ws.onboarding.workOrder.commissionDetails || '', jobDescription: ws.onboarding.workOrder.jobDescription || '',
+      noticePeriod: ws.onboarding.workOrder.noticePeriod || '', costNote: ws.onboarding.workOrder.costNote || '',
+      signed: !!(ws.onboarding.workOrder.signed)
+    } : null,
+    // dashboard PIN is revealed ONLY once the whole journey is complete (Direct Debit done)
+    clientPin: ws.onboarding.ddDone ? ws.customerPin : undefined,
     // client-safe shortlist — total cost only, never the salary or the workings
     shortlist: (ws.onboarding.shortlist || []).map(c => ({
       id: c.id, name: c.name || '', commentary: c.commentary || '', hasCV: !!c.hasCV,
@@ -312,10 +344,8 @@ exports.handler = async (event) => {
   });
   const obRecompute = () => {
     const o = ws.onboarding;
-    if (o.paid && o.questionnaireDone) o.status = 'complete';
-    else if (o.paid) o.status = 'paid';
-    else if (o.signed) o.status = 'signed';
-    else o.status = 'pending';
+    o.status = o.ddDone ? 'complete' : o.woDone ? 'directdebit' : o.hired ? 'workorder' : o.booked ? 'shortlist'
+      : o.questionnaireDone ? 'booked' : o.paid ? 'questionnaire' : o.signed ? 'paid' : 'pending';
   };
   if (action === 'onboardingStatus') {
     return json(200, { ok: true, onboarding: obPublic() });
@@ -414,6 +444,34 @@ exports.handler = async (event) => {
     const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has requested a check-in with the delivery lead.</p>${note ? `<p style="color:#333">“${esc(note)}”</p>` : ''}<p style="color:#777;font-size:13px">Region: ${esc(region || '—')}.</p>`;
     await mail(to, `Check-in requested — ${ws.company || 'client'} (${region || '—'})`, emailWrap('Check-in requested', body, ws, reqBase));
     return json(200, { ok: true });
+  }
+  if (action === 'submitWorkOrder') {
+    if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
+    if (!ws.onboarding.hired) return json(400, { error: 'not at Work Order stage yet' });
+    const name = String(b.name || '').trim(); if (name.length < 2) return json(400, { error: 'enter your full name' });
+    const cf = b.client || {};
+    const wo = ws.onboarding.workOrder = ws.onboarding.workOrder || { client: {}, signed: null };
+    wo.client = {
+      companyName: String(cf.companyName || '').slice(0, 200), companyAddress: String(cf.companyAddress || '').slice(0, 400),
+      companyRegNumber: String(cf.companyRegNumber || '').slice(0, 80), contactName: String(cf.contactName || '').slice(0, 120),
+      hiringManagerEmail: String(cf.hiringManagerEmail || '').slice(0, 160), accountsEmail: String(cf.accountsEmail || '').slice(0, 160)
+    };
+    const ip = (H['x-nf-client-connection-ip'] || (H['x-forwarded-for'] || '').split(',')[0] || '').trim();
+    wo.signed = { name, ip, ts: new Date().toISOString() };
+    ws.onboarding.woDone = { ts: new Date().toISOString() };
+    obRecompute(); await obSave();
+    const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has completed &amp; signed their Work Order for <b>${esc(wo.employeeName || 'the hire')}</b>.</p><p style="color:#777;font-size:13px">Signed by ${esc(name)}. Next step for them: Direct Debit.</p>`;
+    await mail([...TEAM, DELIVERY[ws.onboarding.region]].filter(Boolean), `Work Order signed — ${ws.company || 'client'}`, emailWrap('Work Order signed', body, ws, reqBase));
+    return json(200, { ok: true, onboarding: obPublic() });
+  }
+  if (action === 'markDD') {
+    if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
+    if (!ws.onboarding.woDone) return json(400, { error: 'complete the Work Order first' });
+    ws.onboarding.ddDone = { ts: new Date().toISOString() };
+    obRecompute(); await obSave();
+    const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has set up their Direct Debit — <b>onboarding complete</b>. Their dashboard is now unlocked.</p>`;
+    await mail([...TEAM, DELIVERY[ws.onboarding.region]].filter(Boolean), `Onboarding complete — ${ws.company || 'client'}`, emailWrap('Onboarding complete', body, ws, reqBase));
+    return json(200, { ok: true, onboarding: obPublic() });
   }
 
   const isAdmin = ws.adminPin && String(b.pin) === String(ws.adminPin);
