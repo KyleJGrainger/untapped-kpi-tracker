@@ -135,12 +135,17 @@ async function clientsView(){
 }
 function setMode(m){clientView_mode=m;clientsView();}
 function kanbanCard(c){
-  const reqs=(c.stage==='shortlist')?'':'';
-  return `<div class="card" style="padding:12px;margin-bottom:10px;cursor:pointer" onclick="openClient('${c.id}')">
-    <b style="font-size:14px">${esc(c.company||'—')}</b>
+  return `<div class="card" style="padding:12px;margin-bottom:10px;cursor:pointer;position:relative" onclick="openClient('${c.id}')">
+    <button title="Delete client" onclick="event.stopPropagation();deleteClientAdmin('${c.id}')" style="position:absolute;top:6px;right:8px;background:none;border:0;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px">×</button>
+    <b style="font-size:14px;display:block;padding-right:16px">${esc(c.company||'—')}</b>
     <div class="muted" style="font-size:12px;margin-top:3px">${esc(c.region||'no region')} · £${(c.retainerTotal||0).toFixed(0)}/mo</div>
     <div class="muted" style="font-size:11px;margin-top:5px">${c.signed?('MSA signed '+new Date(c.signed.ts).toLocaleDateString('en-GB')):'Sent '+(c.sentAt?new Date(c.sentAt).toLocaleDateString('en-GB'):'—')}</div>
   </div>`;
+}
+async function deleteClientAdmin(id){
+  if(!confirm('Permanently delete this client and ALL their data (candidates, CVs, signatures)? This cannot be undone.'))return;
+  const j=await api('adminDeleteClient',{wsId:id});
+  if(j.ok){toast('Client deleted');clientsView();}else toast(j.error||'Failed');
 }
 function clientRow(c){
   const st=STAGES[c.stage]||['—','b-mid']; const base=location.origin+'/?w='+c.id;
