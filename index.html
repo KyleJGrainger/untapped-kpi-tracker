@@ -162,7 +162,7 @@ async function refresh(){
   const j=await api('get');
   if(!j.ok){ role=null; return false; }
   role=j.role;
-  if(role==='customer'){ WS=j.workspace; if(!activeId&&WS.candidates[0]) activeId=WS.candidates[0].id; }
+  if(role==='customer'||role==='admin'){ WS=j.workspace; if(!activeId&&WS.candidates[0]) activeId=WS.candidates[0].id; }
   else { ME=j.candidate; company=j.company; }
   return true;
 }
@@ -187,8 +187,9 @@ async function init(){
 function obStepFor(o){ if(!o.signed) return 'welcome'; if(!o.paid) return 'pay'; if(!o.questionnaireDone) return 'quiz'; return 'done'; }
 function route(){
   try{ if(wsId) history.replaceState(null,'',location.pathname+'?w='+wsId); }catch(e){} // keep recoverable link in the address bar
-  who.innerHTML=`<span>${role==='customer'?esc(WS.company||'Customer'):esc(company)} · ${role==='customer'?'Customer':'Candidate'}</span><button class="lock" onclick="App.lock()">Lock</button>`;
-  if(role==='customer') customerApp(); else candidateApp();
+  const roleLabel=role==='admin'?'Untapped admin':role==='customer'?'Customer':'Candidate';
+  who.innerHTML=`<span>${(role==='customer'||role==='admin')?esc(WS.company||'Customer'):esc(company)} · ${roleLabel}</span><button class="lock" onclick="App.lock()">Lock</button>`;
+  if(role==='customer'||role==='admin') customerApp(); else candidateApp();
 }
 
 /* ---------- landing / create ---------- */
@@ -212,31 +213,33 @@ function createForm(){
       <div><label class="fl">Customer PIN (4 digits)</label><input id="f_cp" class="pin" maxlength="4" inputmode="numeric" placeholder="••••"></div>
       <div><label class="fl">Candidate PIN (4 digits)</label><input id="f_kp" class="pin" maxlength="4" inputmode="numeric" placeholder="••••"></div>
     </div>
+    <label class="fl">Untapped admin PIN (4 digits) — for you &amp; your VA only</label><input id="f_ap" class="pin" maxlength="4" inputmode="numeric" placeholder="••••">
     <div class="err" id="f_err"></div>
     <button class="btn" style="width:100%" onclick="App.doCreate()">Create workspace →</button>
   </div></div>`;
 }
 async function doCreate(){
   const co=$('#f_co').value.trim(), em=$('#f_em').value.trim(), nm=$('#f_nm').value.trim();
-  const cp=$('#f_cp').value.trim(), kp=$('#f_kp').value.trim(), err=$('#f_err');
+  const cp=$('#f_cp').value.trim(), kp=$('#f_kp').value.trim(), ap=$('#f_ap').value.trim(), err=$('#f_err');
   if(!co){err.textContent='Enter a company name.';return;}
   if(nm.length<2){err.textContent='Enter the first candidate name.';return;}
-  if(!/^\d{4}$/.test(cp)||!/^\d{4}$/.test(kp)){err.textContent='Both PINs must be 4 digits.';return;}
-  if(cp===kp){err.textContent='Customer and candidate PINs must differ.';return;}
+  if(!/^\d{4}$/.test(cp)||!/^\d{4}$/.test(kp)||!/^\d{4}$/.test(ap)){err.textContent='All three PINs must be 4 digits.';return;}
+  if(new Set([cp,kp,ap]).size!==3){err.textContent='The three PINs must all differ.';return;}
   wsId=null;pin=null;
-  const j=await api('create',{company:co,customerEmail:em,candidate:nm,customerPin:cp,candidatePin:kp});
+  const j=await api('create',{company:co,customerEmail:em,candidate:nm,customerPin:cp,candidatePin:kp,adminPin:ap});
   if(!j.ok){err.textContent=j.error||'Could not create (is the site deployed with the backend?).';return;}
-  wsId=j.wsId; pin=cp; saveSession(); await refresh(); created(kp);
+  wsId=j.wsId; pin=ap; saveSession(); await refresh(); created(cp,kp,ap);
 }
-function created(candPin){
+function created(custPin,candPin,adminPin){
   const base=location.origin+location.pathname+'?w='+wsId;
   el.innerHTML=`<div class="center"><div class="card" style="max-width:560px;width:100%">
     <div class="heatrule"></div><h1 style="font-size:26px">Workspace ready ✓</h1>
-    <p class="muted" style="font-size:14px">Share the candidate link + PIN with your hire. Keep your own customer PIN safe. Both links are the same page — the PIN decides the view.</p>
-    <div class="share"><b>Link (same for both):</b><br>${esc(base)}</div>
+    <p class="muted" style="font-size:14px">One link for everyone — the PIN decides the view. Keep the <b>admin PIN</b> to yourself &amp; your VA; share the client PIN with the client and the candidate PIN with your hire.</p>
+    <div class="share"><b>Link (same for all):</b><br>${esc(base)}</div>
     <div class="grid2" style="margin-top:12px">
-      <div class="share"><b>Customer PIN</b><br>${esc(pin)} <span class="muted">— manage &amp; dashboard</span></div>
-      <div class="share"><b>Candidate PIN</b><br>${esc(candPin)} <span class="muted">— log progress</span></div>
+      <div class="share"><b>Untapped admin PIN</b><br>${esc(adminPin)} <span class="muted">— you &amp; VA: onboarding, retainer, setup</span></div>
+      <div class="share"><b>Client PIN</b><br>${esc(custPin)} <span class="muted">— the client: dashboard</span></div>
+      <div class="share"><b>Candidate PIN</b><br>${esc(candPin)} <span class="muted">— your hire: log progress</span></div>
     </div>
     <div class="row" style="margin-top:16px">
       <button class="btn" onclick="App.enter()">Enter dashboard →</button>
@@ -268,7 +271,9 @@ function obStepper(active){
 }
 function obStaffLink(){ return `<p class="muted" style="font-size:12px;margin-top:16px;text-align:center">Untapped staff or already onboarded? <a href="#" onclick="App.obStaff();return false" style="color:var(--muted);text-decoration:underline">Enter PIN</a></p>`; }
 function obFunnel(step){
-  const co=(OB&&OB.company)||'Untapped', ret=(OB&&OB.retainer)||1000;
+  const co=(OB&&OB.company)||'Untapped';
+  const perHire=(OB&&OB.retainerPerHire)||1000, hires=(OB&&OB.hires)||1;
+  const ret=(OB&&OB.retainerTotal)||perHire*hires;
   if(step==='welcome'){
     el.innerHTML=`<div class="center"><div class="card" style="max-width:620px;width:100%">
       <div class="heatrule"></div><div class="lab">Welcome to Untapped</div>
@@ -300,6 +305,7 @@ function obFunnel(step){
       <h1 style="font-size:24px">Pay your retainer</h1>
       <p class="muted" style="font-size:14px">Terms signed ✓ — thank you. To begin, please pay your onboarding retainer.</p>
       <div style="font-family:Iowan Old Style,Georgia,serif;font-size:44px;margin:14px 0">£${ret}</div>
+      ${hires>1?`<p class="muted" style="font-size:13px;margin-top:-8px">£${perHire} × ${hires} hires</p>`:''}
       <div class="err" id="ob_err"></div>
       <button class="btn" style="width:100%" onclick="App.obPay()">Pay securely with card →</button>
       <p class="muted" style="font-size:12px;margin-top:8px">Payments processed securely by Stripe.</p>
@@ -339,7 +345,7 @@ function monthLabel(m){return new Date(m+'-01T00:00:00').toLocaleDateString('en-
 function customerApp(){
   const hdr=`<div class="sechdr"><div><div class="lab">Customer dashboard</div><h1 style="font-size:28px">${esc(WS.company||'Your team')}</h1></div>
     <div class="row"><button class="btn ghost sm" onclick="App.digest()">Email weekly digest</button><button class="btn ghost sm" onclick="App.addCand()">+ Add candidate</button></div></div>`;
-  const nav=`<div class="tabs" style="margin-bottom:14px"><button class="tab ${cView==='dashboard'?'on':''}" onclick="App.cView('dashboard')">Team dashboard</button><button class="tab ${cView==='commissions'?'on':''}" onclick="App.cView('commissions')">Commissions &amp; bonuses</button>${(WS.onboarding&&WS.onboarding.status!=='complete')?`<button class="tab ${cView==='onboarding'?'on':''}" onclick="App.cView('onboarding')">Client onboarding</button>`:''}<button class="tab ${cView==='playbook'?'on':''}" onclick="App.cView('playbook')">90-day Playbook</button></div>`;
+  const nav=`<div class="tabs" style="margin-bottom:14px"><button class="tab ${cView==='dashboard'?'on':''}" onclick="App.cView('dashboard')">Team dashboard</button><button class="tab ${cView==='commissions'?'on':''}" onclick="App.cView('commissions')">Commissions &amp; bonuses</button>${(role==='admin'||(role==='customer'&&!WS.hasAdminPin))?`<button class="tab ${cView==='onboarding'?'on':''}" onclick="App.cView('onboarding')">${role==='admin'?'Onboarding setup':'Untapped setup'}</button>`:''}<button class="tab ${cView==='playbook'?'on':''}" onclick="App.cView('playbook')">90-day Playbook</button></div>`;
   if(cView==='playbook'){ el.innerHTML=hdr+nav+embedHTML('https://untapped-playbook.netlify.app/','The 90-day onboarding Playbook'); return; }
   if(cView==='commissions'){ el.innerHTML=hdr+nav+`<div id="comm"></div>`; renderCommissions(); return; }
   if(cView==='onboarding'){ el.innerHTML=hdr+nav+`<div id="obadmin"></div>`; renderOnboardingAdmin(); return; }
@@ -351,26 +357,41 @@ function customerApp(){
 }
 function commRow(x){return `<div class="item"><div class="row" style="justify-content:space-between;align-items:center"><div><b>£${(Number(x.amount)||0).toFixed(2)}</b> <span class="muted">· ${esc(x.type)} · ${esc(x.candidateName||'—')}</span>${x.note?`<div class="muted" style="font-size:13px">${esc(x.note)}</div>`:''}<div class="muted" style="font-size:12px">${monthLabel(x.month)}</div></div><button class="del" onclick="App.delComm('${x.id}')">✕</button></div>`;}
 function renderOnboardingAdmin(){
-  const o=WS.onboarding||{required:false,retainer:1000,status:'pending'};
   const box=$('#obadmin');
+  // Bootstrap: a client-side (customer) login on a workspace that has no Untapped admin PIN yet.
+  if(role==='customer'){
+    box.innerHTML=`<p class="muted" style="max-width:620px">Onboarding settings — the retainer and number of hires — are managed by Untapped, not the client. Set an <b>Untapped admin PIN</b> below; from then on these settings are only reachable with that PIN, and the client never sees them.</p>
+      <div class="card" style="margin-top:14px;max-width:460px">
+        <label class="fl">Create Untapped admin PIN (4 digits)</label>
+        <input id="ob_apin" class="pin" maxlength="4" inputmode="numeric" placeholder="••••">
+        <div class="err" id="ob_apin_err"></div>
+        <button class="btn sm" style="margin-top:10px" onclick="App.saveAdminPin()">Set admin PIN →</button>
+      </div>`;
+    return;
+  }
+  // Admin view — full onboarding configuration.
+  const o=WS.onboarding||{required:false,retainerPerHire:1000,hires:1,status:'pending'};
+  const perHire=Number(o.retainerPerHire)||1000, hires=Number(o.hires)||1, total=perHire*hires;
   const base=location.origin+location.pathname+'?w='+wsId;
   const chip=(ok,label)=>`<span class="badge ${ok?'':'open'}" style="margin-right:6px">${ok?'✓':'○'} ${label}</span>`;
   const sg=o.signed, pd=o.paid;
   box.innerHTML=`
-    <p class="muted" style="max-width:640px">This gates the client's link: when switched on, anyone opening it must sign your terms, pay the retainer, and complete the kick-off questionnaire before the dashboard unlocks. You always get in with your customer PIN.</p>
+    <p class="muted" style="max-width:640px">Set this up <b>before you send the client their link</b>. When switched on, the client must sign your terms, pay the retainer, and complete the kick-off questionnaire before their dashboard unlocks. Only you (with this admin PIN) can change these; the client cannot.</p>
     <div class="card" style="margin-top:14px;max-width:640px">
       <label class="row" style="align-items:center;gap:10px;cursor:pointer;font-size:15px"><input type="checkbox" id="ob_req" ${o.required?'checked':''} style="width:18px;height:18px"> <b>Require onboarding on this client's link</b></label>
       <div class="grid2" style="margin-top:14px">
-        <div><label class="fl">Retainer amount (£)</label><input id="ob_ret" type="number" min="0" step="50" value="${Number(o.retainer)||1000}"></div>
-        <div style="display:flex;align-items:flex-end"><button class="btn sm" onclick="App.saveOnboarding()">Save settings</button></div>
+        <div><label class="fl">Retainer per hire (£)</label><input id="ob_ret" type="number" min="0" step="50" value="${perHire}" oninput="App.obTotalPreview()"></div>
+        <div><label class="fl">Number of hires</label><input id="ob_hires" type="number" min="1" step="1" value="${hires}" oninput="App.obTotalPreview()"></div>
       </div>
+      <div style="margin-top:12px;font-size:15px">Total retainer charged: <b id="ob_total">£${total.toFixed(0)}</b> <span class="muted">(£${perHire} × ${hires})</span></div>
+      <button class="btn sm" style="margin-top:12px" onclick="App.saveOnboarding()">Save settings</button>
     </div>
     <div class="card" style="margin-top:14px;max-width:640px">
       <div class="lab">This client's progress</div>
       <div style="margin:10px 0">${chip(!!sg,'Terms signed')}${chip(!!pd,'Retainer paid')}${chip(!!o.questionnaireDone,'Questionnaire')}</div>
       ${sg?`<div class="muted" style="font-size:13px">Signed by <b>${esc(sg.name)}</b> on ${new Date(sg.ts).toLocaleString('en-GB')}${sg.ip?` · IP ${esc(sg.ip)}`:''}</div>`:'<div class="muted" style="font-size:13px">Not signed yet.</div>'}
       ${pd?`<div class="muted" style="font-size:13px">Paid £${(Number(pd.amount)||0).toFixed(2)} on ${new Date(pd.ts).toLocaleString('en-GB')}</div>`:''}
-      <div class="share" style="margin-top:12px"><b>Client onboarding link:</b><br>${esc(base)}</div>
+      <div class="share" style="margin-top:12px"><b>Client onboarding link (send this):</b><br>${esc(base)}</div>
       <div class="row" style="margin-top:12px">
         <button class="btn ghost sm" onclick="App.copy('${esc(base)}')">Copy link</button>
         <button class="btn ghost sm" onclick="App.resetOnboarding()">Reset (let them redo it)</button>
@@ -594,7 +615,9 @@ const App={
   // commissions (customer)
   addComm:async()=>{const amount=$('#cm_a').value;if(!amount||Number(amount)<=0){$('#cm_err').textContent='Enter an amount greater than 0.';return;}const j=await api('addCommission',{candidateId:$('#cm_c').value,amount,type:$('#cm_t').value,note:$('#cm_n').value.trim(),month:$('#cm_m').value});if(j.ok){await refresh();renderCommissions();toast('Added');}else $('#cm_err').textContent=j.error||'Failed';},
   delComm:async(id)=>{const j=await api('deleteCommission',{commissionId:id});if(j.ok){await refresh();renderCommissions();toast('Removed');}},
-  saveOnboarding:async()=>{ const required=$('#ob_req').checked, retainer=$('#ob_ret').value; const j=await api('setOnboardingConfig',{required,retainer}); if(j.ok){await refresh();renderOnboardingAdmin();toast('Onboarding settings saved');} else toast(j.error||'Failed'); },
+  saveOnboarding:async()=>{ const required=$('#ob_req').checked, retainerPerHire=$('#ob_ret').value, hires=$('#ob_hires').value; const j=await api('setOnboardingConfig',{required,retainerPerHire,hires}); if(j.ok){await refresh();renderOnboardingAdmin();toast('Onboarding settings saved');} else toast(j.error||'Failed'); },
+  obTotalPreview:()=>{ const p=Number($('#ob_ret').value)||0, h=Math.max(1,Number($('#ob_hires').value)||1); const t=$('#ob_total'); if(t)t.textContent='£'+(p*h).toFixed(0); },
+  saveAdminPin:async()=>{ const v=$('#ob_apin').value.trim(), err=$('#ob_apin_err'); if(!/^\d{4}$/.test(v)){err.textContent='PIN must be 4 digits.';return;} const j=await api('setAdminPin',{newAdminPin:v}); if(j.ok){alert('Admin PIN set. From now on, open onboarding settings by unlocking with this admin PIN — the client PIN no longer shows them.');clearSession();location.search='?w='+wsId;} else err.textContent=j.error||'Failed'; },
   resetOnboarding:async()=>{ if(!confirm('Reset this client’s onboarding? They’ll need to sign, pay and complete the questionnaire again.'))return; const j=await api('resetOnboarding'); if(j.ok){await refresh();renderOnboardingAdmin();toast('Onboarding reset');} else toast(j.error||'Failed'); },
   obGo:(s)=>obFunnel(s),
   obStaff:()=>{ try{history.replaceState(null,'',location.pathname+'?w='+wsId);}catch(e){} unlock(); },
