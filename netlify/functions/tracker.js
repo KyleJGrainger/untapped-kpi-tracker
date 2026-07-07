@@ -226,7 +226,8 @@ exports.handler = async (event) => {
   }
   // ---- Admin: manage a specific client's candidate shortlist ----
   if (action === 'adminGetClient' || action === 'adminAddCandidate' || action === 'adminUpdateCandidate'
-      || action === 'adminRemoveCandidate' || action === 'adminUploadCV' || action === 'adminSetHired' || action === 'adminSaveWorkOrder') {
+      || action === 'adminRemoveCandidate' || action === 'adminUploadCV' || action === 'adminSetHired' || action === 'adminSaveWorkOrder'
+      || action === 'adminCountersignMSA' || action === 'adminCountersignWO') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'client not found' });
     w.onboarding = w.onboarding || {}; if (!Array.isArray(w.onboarding.shortlist)) w.onboarding.shortlist = [];
@@ -239,7 +240,7 @@ exports.handler = async (event) => {
         retainerPerHire: o.retainerPerHire, hires: o.hires, vat: !!o.vat,
         signed: o.signed || null, paid: o.paid || null, questionnaireDone: !!o.questionnaireDone,
         booked: o.booked || null, hired: o.hired || null, woDone: o.woDone || null, ddDone: o.ddDone || null,
-        workOrder: o.workOrder || null,
+        msaCountersign: o.msaCountersign || null, workOrder: o.workOrder || null,
         shortlist: (o.shortlist || []).map(c => { const k = costOf(c.salary, region); return {
           id: c.id, name: c.name, commentary: c.commentary || '', salary: Number(c.salary) || 0, hasCV: !!c.hasCV,
           pct: k.pct, fee: k.fee, feeLabel: k.feeLabel, totalCost: k.total, requests: c.requests || [] }; })
@@ -262,6 +263,17 @@ exports.handler = async (event) => {
       if (f.grossSalaryMonthly != null) wo.grossSalaryMonthly = Math.max(0, Number(f.grossSalaryMonthly) || 0);
       if (f.annualLeaveDays != null) wo.annualLeaveDays = Math.max(0, Number(f.annualLeaveDays) || 0);
       if (f.sickLeaveDays != null) wo.sickLeaveDays = Math.max(0, Number(f.sickLeaveDays) || 0);
+      await saveW(); return json(200, { ok: true });
+    }
+    if (action === 'adminCountersignMSA') {
+      const name = String(b.name || '').trim(); if (name.length < 2) return json(400, { error: 'enter your name' });
+      w.onboarding.msaCountersign = { name, title: String(b.title || 'CEO').slice(0, 80), ts: new Date().toISOString() };
+      await saveW(); return json(200, { ok: true });
+    }
+    if (action === 'adminCountersignWO') {
+      if (!w.onboarding.workOrder) return json(400, { error: 'no work order yet' });
+      const name = String(b.name || '').trim(); if (name.length < 2) return json(400, { error: 'enter your name' });
+      w.onboarding.workOrder.untappedSigned = { name, title: String(b.title || 'CEO').slice(0, 80), ts: new Date().toISOString() };
       await saveW(); return json(200, { ok: true });
     }
     if (action === 'adminAddCandidate') {
