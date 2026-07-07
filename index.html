@@ -294,8 +294,11 @@ function obFunnel(step){
         ? `<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:12px 0;height:340px;background:#fff"><iframe src="${msaSrc(region)}" style="width:100%;height:100%;border:0" title="Master Services Agreement"></iframe></div>
       <p class="muted" style="font-size:12px;margin:0 0 10px">Scroll to review the full Master Services Agreement above. By typing your name and ticking the box, you agree to it on behalf of your company.</p>`
         : `<div style="border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0;color:var(--muted);font-size:13px">Your agreement will appear here. Please contact Untapped — the agreement region hasn't been set for your account yet.</div>`}
-      <label class="fl">Full name</label><input id="ob_name" placeholder="e.g. Jane Smith">
-      <label class="row" style="align-items:center;gap:10px;margin-top:12px;cursor:pointer;font-size:14px"><input type="checkbox" id="ob_agree" style="width:18px;height:18px"> I have read and agree to the terms above.</label>
+      <div style="margin:14px 0 4px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Your company (as it appears on the agreement)</div>
+      <div class="grid2"><div><label class="fl">Company name</label><input id="ob_company" placeholder="e.g. Acme Ltd"></div><div><label class="fl">Company registration number</label><input id="ob_reg" placeholder="e.g. 12345678"></div></div>
+      <label class="fl">Registered address</label><input id="ob_addr" placeholder="Principal office address">
+      <label class="fl" style="margin-top:12px">Your full name (signature)</label><input id="ob_name" placeholder="e.g. Jane Smith">
+      <label class="row" style="align-items:center;gap:10px;margin-top:12px;cursor:pointer;font-size:14px"><input type="checkbox" id="ob_agree" style="width:18px;height:18px"> I have read and agree to the agreement above on behalf of my company.</label>
       <div class="err" id="ob_err"></div>
       <button class="btn" style="width:100%;margin-top:8px" onclick="App.obSign()">Agree &amp; continue →</button>
       ${obStaffLink()}
@@ -335,7 +338,7 @@ function obFunnel(step){
     </div></div>`; return;
   }
   if(step==='workorder'){
-    const wo=(OB&&OB.workOrder)||{};
+    const wo=(OB&&OB.workOrder)||{}; const sc=(OB&&OB.signedCompany)||{};
     const row=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px"><span class="muted">${l}</span><span style="text-align:right">${esc(v||'—')}</span></div>`;
     el.innerHTML=`<div class="center" style="align-items:flex-start"><div class="card" style="max-width:680px;width:100%">
       <div class="heatrule"></div><div class="lab">Work Order</div>
@@ -344,8 +347,8 @@ function obFunnel(step){
       <div style="margin:14px 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">The hire</div>
       ${row('Employee',wo.employeeName)}${row('Job title',wo.jobTitle)}${row('Start date',wo.startDate)}${row('Gross salary','£'+(Number(wo.grossSalaryMonthly)||0).toLocaleString('en-GB')+'/mo')}${row('Annual leave',(wo.annualLeaveDays!=null?wo.annualLeaveDays+' days':''))}${row('Sick leave',(wo.sickLeaveDays!=null?wo.sickLeaveDays+' days':''))}${row('Notice period',wo.noticePeriod)}${wo.jobDescription?`<div style="padding:8px 0;font-size:13px" class="muted">${esc(wo.jobDescription)}</div>`:''}
       <div style="margin:16px 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Your company details</div>
-      <div class="grid2"><div><label class="fl">Company name</label><input id="wo_cn"></div><div><label class="fl">Company reg. number</label><input id="wo_rn"></div></div>
-      <label class="fl">Company address</label><input id="wo_ad">
+      <div class="grid2"><div><label class="fl">Company name</label><input id="wo_cn" value="${esc(sc.name||'')}"></div><div><label class="fl">Company reg. number</label><input id="wo_rn" value="${esc(sc.regNumber||'')}"></div></div>
+      <label class="fl">Company address</label><input id="wo_ad" value="${esc(sc.address||'')}">
       <div class="grid2"><div><label class="fl">Contact name</label><input id="wo_ct"></div><div><label class="fl">Hiring manager email</label><input id="wo_hm" type="email"></div></div>
       <label class="fl">Accounts email (for invoicing)</label><input id="wo_ac" type="email">
       <label class="fl" style="margin-top:12px">Full name (signature)</label><input id="wo_sig">
@@ -716,7 +719,7 @@ const App={
   deleteWorkspace:async()=>{ const t=prompt('This permanently deletes this workspace and ALL its data. Type DELETE to confirm.'); if(t!=='DELETE'){ if(t!==null)toast('Not deleted — you must type DELETE'); return; } const j=await api('deleteWorkspace',{confirm:'DELETE'}); if(j.ok){ clearSession(); pin=null;role=null;WS=null; alert('Workspace deleted.'); location.search=''; } else toast(j.error||'Failed'); },
   obGo:(s)=>obFunnel(s),
   obStaff:()=>{ try{history.replaceState(null,'',location.pathname+'?w='+wsId);}catch(e){} unlock(); },
-  obSign:async()=>{ const name=$('#ob_name').value.trim(), agree=$('#ob_agree').checked, err=$('#ob_err'); if(name.length<2){err.textContent='Please enter your full name.';return;} if(!agree){err.textContent='Please tick the box to agree to the terms.';return;} err.textContent=''; const j=await api('submitSignature',{name}); if(j.ok){OB=j.onboarding;obFunnel('pay');} else err.textContent=j.error||'Could not save your signature.'; },
+  obSign:async()=>{ const name=$('#ob_name').value.trim(), agree=$('#ob_agree').checked, err=$('#ob_err'); const company={name:$('#ob_company').value.trim(),regNumber:$('#ob_reg').value.trim(),address:$('#ob_addr').value.trim()}; if(!company.name){err.textContent='Please enter your company name.';return;} if(!company.regNumber){err.textContent='Please enter your company registration number.';return;} if(name.length<2){err.textContent='Please enter your full name.';return;} if(!agree){err.textContent='Please tick the box to agree.';return;} err.textContent=''; const j=await api('submitSignature',{name,company}); if(j.ok){OB=j.onboarding;obFunnel('pay');} else err.textContent=j.error||'Could not save your signature.'; },
   obPay:async()=>{ const err=$('#ob_err'); err.textContent='Opening secure payment…'; const j=await api('createCheckout'); if(j.ok&&j.url){ location.href=j.url; } else { err.textContent=j.error==='payment not configured'?'Payment isn’t switched on yet — please contact Untapped.':(j.error||'Could not start payment.'); } },
   obQuizDone:async()=>{ const j=await api('markQuestionnaireDone'); if(j.ok){OB=j.onboarding;obFunnel('book');} else toast(j.error||'Failed'); },
   obBooked:async()=>{ const j=await api('markBooked'); if(j.ok){OB=j.onboarding;obFunnel('shortlist');} else toast(j.error||'Failed'); },

@@ -205,6 +205,7 @@ async function openClient(id){
     <div class="card">
       <b style="font-size:15px">Master Services Agreement (${esc(c.region||'—')})</b>
       <div class="muted" style="font-size:13px;margin-top:8px">Client: ${c.signed?`${esc(c.signed.name)} · ${new Date(c.signed.ts).toLocaleString('en-GB')}`:'not signed yet'}</div>
+      ${c.signed&&c.signed.company?`<div class="muted" style="font-size:13px;margin-top:4px">${esc(c.signed.company.name||'')} · Reg ${esc(c.signed.company.regNumber||'')}${c.signed.company.address?' · '+esc(c.signed.company.address):''}</div>`:''}
       <div class="muted" style="font-size:13px;margin-top:4px">Untapped: ${c.msaCountersign?`${esc(c.msaCountersign.name)} (${esc(c.msaCountersign.title)}) · ${new Date(c.msaCountersign.ts).toLocaleString('en-GB')}`:'not counter-signed'}</div>
       <div class="row" style="margin-top:10px">
         <a class="btn ghost sm" href="/${c.region==='Philippines'?'msa-philippines.html':'msa-south-africa.html'}" target="_blank">View MSA</a>
@@ -269,7 +270,9 @@ function printRecord(id,kind){
     <tr><td>Client company</td><td>${esc(cl.companyName||'')} (Reg ${esc(cl.companyRegNumber||'')})</td></tr>
     <tr><td>Client address</td><td>${esc(cl.companyAddress||'')}</td></tr>
     <tr><td>Contacts</td><td>${esc(cl.hiringManagerEmail||'')} · ${esc(cl.accountsEmail||'')}</td></tr>`:`
-    <tr><td>Agreement</td><td>Master Services Agreement — ${esc(c.region||'')}</td></tr>`;
+    <tr><td>Agreement</td><td>Master Services Agreement — ${esc(c.region||'')}</td></tr>
+    <tr><td>Customer company</td><td>${esc((c.signed&&c.signed.company&&c.signed.company.name)||'')} ${(c.signed&&c.signed.company&&c.signed.company.regNumber)?'(Reg '+esc(c.signed.company.regNumber)+')':''}</td></tr>
+    <tr><td>Registered address</td><td>${esc((c.signed&&c.signed.company&&c.signed.company.address)||'—')}</td></tr>`;
   const clientSig=kind==='wo'?wo.signed:c.signed; const untappedSig=kind==='wo'?wo.untappedSigned:c.msaCountersign;
   const title=kind==='wo'?'Work Order':'Master Services Agreement';
   const w=window.open('','_blank'); if(!w){toast('Allow pop-ups to print');return;}
