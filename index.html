@@ -406,6 +406,11 @@ function renderOnboardingAdmin(){
         <button class="btn ghost sm" onclick="App.copy('${esc(base)}')">Copy link</button>
         <button class="btn ghost sm" onclick="App.resetOnboarding()">Reset (let them redo it)</button>
       </div>
+    </div>
+    <div class="card" style="margin-top:14px;max-width:640px;border-color:rgba(218,41,28,.4)">
+      <div class="lab" style="color:#DA291C">Danger zone</div>
+      <p class="muted" style="font-size:13px;margin:8px 0 12px">Permanently delete this workspace and all of its data (candidates, KPIs, time off, commissions, onboarding). This cannot be undone.</p>
+      <button class="btn ghost sm" style="border-color:#DA291C;color:#DA291C" onclick="App.deleteWorkspace()">Delete this workspace permanently</button>
     </div>`;
 }
 function renderCommissions(){
@@ -629,6 +634,7 @@ const App={
   obTotalPreview:()=>{ const p=Number($('#ob_ret').value)||0, h=Math.max(1,Number($('#ob_hires').value)||1), v=$('#ob_vat').checked; const base=p*h, tot=v?base*1.2:base; const t=$('#ob_total'); if(t)t.textContent='£'+tot.toFixed(2); const b=$('#ob_break'); if(b)b.textContent='(£'+p+' × '+h+(v?' + VAT':'')+')'; },
   saveAdminPin:async()=>{ const v=$('#ob_apin').value.trim(), err=$('#ob_apin_err'); if(!/^\d{4}$/.test(v)){err.textContent='PIN must be 4 digits.';return;} const j=await api('setAdminPin',{newAdminPin:v}); if(j.ok){alert('Admin PIN set. From now on, open onboarding settings by unlocking with this admin PIN — the client PIN no longer shows them.');clearSession();location.search='?w='+wsId;} else err.textContent=j.error||'Failed'; },
   resetOnboarding:async()=>{ if(!confirm('Reset this client’s onboarding? They’ll need to sign, pay and complete the questionnaire again.'))return; const j=await api('resetOnboarding'); if(j.ok){await refresh();renderOnboardingAdmin();toast('Onboarding reset');} else toast(j.error||'Failed'); },
+  deleteWorkspace:async()=>{ const t=prompt('This permanently deletes this workspace and ALL its data. Type DELETE to confirm.'); if(t!=='DELETE'){ if(t!==null)toast('Not deleted — you must type DELETE'); return; } const j=await api('deleteWorkspace',{confirm:'DELETE'}); if(j.ok){ clearSession(); pin=null;role=null;WS=null; alert('Workspace deleted.'); location.search=''; } else toast(j.error||'Failed'); },
   obGo:(s)=>obFunnel(s),
   obStaff:()=>{ try{history.replaceState(null,'',location.pathname+'?w='+wsId);}catch(e){} unlock(); },
   obSign:async()=>{ const name=$('#ob_name').value.trim(), agree=$('#ob_agree').checked, err=$('#ob_err'); if(name.length<2){err.textContent='Please enter your full name.';return;} if(!agree){err.textContent='Please tick the box to agree to the terms.';return;} err.textContent=''; const j=await api('submitSignature',{name}); if(j.ok){OB=j.onboarding;obFunnel('pay');} else err.textContent=j.error||'Could not save your signature.'; },
