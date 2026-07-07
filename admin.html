@@ -124,12 +124,63 @@ async function clientsView(){
           <b>${esc(c.company||'—')}</b> <span class="muted">· ${esc(c.region||'no region')} · £${(c.retainerTotal||0).toFixed(0)}</span>
           ${c.signed?`<div class="muted" style="font-size:12px;margin-top:3px">MSA signed by ${esc(c.signed.name)} on ${new Date(c.signed.ts).toLocaleDateString('en-GB')}</div>`:`<div class="muted" style="font-size:12px;margin-top:3px">MSA not signed yet</div>`}
         </div>
-        <div class="row"><span class="badge ${st[1]}">${st[0]}</span><button class="btn ghost sm" onclick="copy('${base}')">Copy link</button></div>
+        <div class="row"><span class="badge ${st[1]}">${st[0]}</span><button class="btn ghost sm" onclick="copy('${base}')">Copy link</button><button class="btn sm" onclick="openClient('${c.id}')">Open</button></div>
       </div>`;
     });
   });
   box.innerHTML=html;
 }
+
+async function openClient(id){
+  view='client';$('#topr').innerHTML=`<button class="btn ghost sm" onclick="lock()">Lock</button>`;
+  el.innerHTML=`<button class="tab" onclick="go('clients')">← Back to clients</button><div id="body"><div class="empty">Loading…</div></div>`;
+  const j=await api('adminGetClient',{wsId:id});
+  const box=$('#body');
+  if(!j.ok){box.innerHTML='<div class="empty">'+(j.error||'Failed')+'</div>';return;}
+  const c=j.client; window.__client=c;
+  const step=(ok,label)=>`<span class="badge ${ok?'b-active':'b-sent'}" style="margin-right:6px">${ok?'✓':'○'} ${label}</span>`;
+  const cards=(c.shortlist||[]).map(cand=>{
+    const reqs=(cand.requests||[]).map(r=>r.label).filter((v,i,a)=>a.indexOf(v)===i);
+    const cvUrl='/.netlify/functions/cv?w='+encodeURIComponent(c.id)+'&c='+encodeURIComponent(cand.id);
+    return `<div class="card" style="margin-top:10px">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div><b style="font-size:16px">${esc(cand.name)}</b>${cand.commentary?`<div class="muted" style="font-size:13px;margin-top:3px">“${esc(cand.commentary)}”</div>`:''}</div>
+        <button class="btn ghost sm" style="border-color:#DA291C;color:#ff8a80" onclick="removeCand('${c.id}','${cand.id}')">Remove</button>
+      </div>
+      <div style="margin-top:10px;font-size:14px" class="muted">Salary £${(cand.salary||0).toLocaleString('en-GB')}/mo → service charge ${Math.round(cand.pct*100)}% + ${esc(cand.feeLabel)} £${cand.fee} → <b style="color:#fff">client sees £${(cand.totalCost||0).toLocaleString('en-GB',{maximumFractionDigits:0})}/mo</b></div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label class="fl">Update salary (£/mo)</label><input type="number" min="0" step="50" id="sal_${cand.id}" value="${cand.salary||0}"></div>
+        <div style="display:flex;align-items:flex-end;gap:8px">
+          <button class="btn sm" onclick="saveSalary('${c.id}','${cand.id}')">Save salary</button>
+          <label class="btn ghost sm" style="cursor:pointer">${cand.hasCV?'Replace CV':'Upload CV'}<input type="file" accept="application/pdf" style="display:none" onchange="uploadCV('${c.id}','${cand.id}',this)"></label>
+        </div>
+      </div>
+      ${cand.hasCV?`<div class="muted" style="font-size:12px;margin-top:8px">CV uploaded · <a href="${cvUrl}" target="_blank" style="color:#ffb27a">view</a></div>`:'<div class="muted" style="font-size:12px;margin-top:8px">No CV uploaded yet.</div>'}
+      ${reqs.length?`<div style="margin-top:8px"><span class="badge b-active">Client requested: ${reqs.map(esc).join(' · ')}</span></div>`:''}
+    </div>`;
+  }).join('')||'<div class="empty">No candidates presented yet. Add one below.</div>';
+  box.innerHTML=`
+    <h1 style="font-size:23px;margin:6px 0 2px">${esc(c.company)}</h1>
+    <p class="muted" style="font-size:13px">${esc(c.region||'—')} · retainer £${((c.vat?c.retainerPerHire*c.hires*1.2:c.retainerPerHire*c.hires)||0).toFixed(0)} · <a href="${location.origin+'/?w='+c.id}" target="_blank" style="color:#ffb27a">client link ↗</a></p>
+    <div style="margin:12px 0">${step(!!c.signed,'MSA signed')}${step(!!c.paid,'Retainer paid')}${step(!!c.questionnaireDone,'Questionnaire')}${step(!!c.booked,'Kick-off booked')}</div>
+    <div class="month">Candidate shortlist</div>
+    ${cards}
+    <div class="card" style="margin-top:14px">
+      <b style="font-size:15px">Add a candidate</b>
+      <div class="grid2" style="margin-top:10px">
+        <div><label class="fl">Name</label><input id="nc_name" placeholder="Candidate name"></div>
+        <div><label class="fl">Salary (£/mo)</label><input id="nc_sal" type="number" min="0" step="50" value="0"></div>
+      </div>
+      <label class="fl">Commentary (the pill the client sees)</label><input id="nc_comm" placeholder="e.g. 6 yrs SaaS support, immediate start">
+      <div class="err" id="nc_err"></div>
+      <button class="btn sm" style="margin-top:6px" onclick="addCand('${c.id}')">Add candidate</button>
+      <p class="muted" style="font-size:12px;margin-top:6px">Add the candidate, then use “Upload CV” on their card to attach the profile PDF.</p>
+    </div>`;
+}
+async function addCand(id){const name=$('#nc_name').value.trim(),salary=$('#nc_sal').value,commentary=$('#nc_comm').value.trim();if(!name){$('#nc_err').textContent='Enter a name.';return;}const j=await api('adminAddCandidate',{wsId:id,name,salary,commentary});if(j.ok){toast('Candidate added');openClient(id);}else $('#nc_err').textContent=j.error||'Failed';}
+async function saveSalary(id,cid){const salary=$('#sal_'+cid).value;const j=await api('adminUpdateCandidate',{wsId:id,candidateId:cid,salary});if(j.ok){toast('Salary saved');openClient(id);}else toast(j.error||'Failed');}
+async function removeCand(id,cid){if(!confirm('Remove this candidate from the shortlist?'))return;const j=await api('adminRemoveCandidate',{wsId:id,candidateId:cid});if(j.ok){toast('Removed');openClient(id);}else toast(j.error||'Failed');}
+function uploadCV(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>6*1024*1024){toast('File too big (max 6MB)');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading…');const j=await api('adminUploadCV',{wsId:id,candidateId:cid,dataBase64:String(r.result)});if(j.ok){toast('CV uploaded');openClient(id);}else toast(j.error||'Upload failed');};r.readAsDataURL(f);}
 
 function newClientForm(){
   $('#body').innerHTML=`<div class="card" style="max-width:560px">

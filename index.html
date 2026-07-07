@@ -184,7 +184,7 @@ async function init(){
   }
   unlock();
 }
-function obStepFor(o){ if(!o.signed) return 'welcome'; if(!o.paid) return 'pay'; if(!o.questionnaireDone) return 'quiz'; return 'done'; }
+function obStepFor(o){ if(!o.signed) return 'welcome'; if(!o.paid) return 'pay'; if(!o.questionnaireDone) return 'quiz'; if(!o.booked) return 'book'; return 'shortlist'; }
 function route(){
   try{ if(wsId) history.replaceState(null,'',location.pathname+'?w='+wsId); }catch(e){} // keep recoverable link in the address bar
   const roleLabel=role==='admin'?'Untapped admin':role==='customer'?'Customer':'Candidate';
@@ -262,7 +262,7 @@ function unlock(){
 
 /* ---------- onboarding funnel (sits in front of PIN) ---------- */
 function obStepper(active){
-  const steps=[['terms','Terms'],['pay','Payment'],['quiz','Kick-off']];
+  const steps=[['terms','Terms'],['pay','Payment'],['quiz','Questionnaire'],['book','Kick-off call'],['shortlist','Candidates']];
   return `<div class="row" style="gap:8px;justify-content:center;margin:0 0 18px">${steps.map((s,i)=>{
     const done=steps.findIndex(x=>x[0]===active)>i, on=s[0]===active;
     const col=done?'#FF6900':on?'#FFC600':'rgba(255,255,255,.18)';
@@ -318,25 +318,65 @@ function obFunnel(step){
     el.innerHTML=`<div class="center" style="align-items:flex-start"><div class="card" style="max-width:900px;width:100%">
       <div class="heatrule"></div>${obStepper('quiz')}
       <h1 style="font-size:24px">Kick-off questionnaire</h1>
-      <p class="muted" style="font-size:14px">Payment received ✓ — last step. Please complete the questionnaire below, then click continue.</p>
+      <p class="muted" style="font-size:14px">Payment received ✓ — please complete the questionnaire below. Once done, you'll book your kick-off call.</p>
       ${embedHTML(KICKOFF_URL,'Pre-kick-off questionnaire')}
-      <button class="btn" style="width:100%;margin-top:16px" onclick="App.obQuizDone()">I've completed it — continue →</button>
+      <button class="btn" style="width:100%;margin-top:16px" onclick="App.obQuizDone()">I've completed it — continue to booking →</button>
     </div></div>`; return;
   }
-  // done
-  el.innerHTML=`<div class="center"><div class="card" style="max-width:520px;width:100%;text-align:center">
-    <div class="heatrule" style="margin:0 auto 14px"></div>
-    <h1 style="font-size:26px">You're all set ✓</h1>
-    <p class="muted" style="font-size:15px">Thanks, ${esc(co)}. Your onboarding is complete — enter your dashboard PIN to get started.</p>
-    <button class="btn" style="width:100%;margin-top:16px" onclick="App.obStaff()">Enter your dashboard →</button>
+  if(step==='book'){
+    const bk=(OB&&OB.kickoffUrl)||'';
+    el.innerHTML=`<div class="center" style="align-items:flex-start"><div class="card" style="max-width:900px;width:100%">
+      <div class="heatrule"></div>${obStepper('book')}
+      <h1 style="font-size:24px">Book your kick-off call</h1>
+      <p class="muted" style="font-size:14px">Questionnaire received ✓ — the final step before we prepare your candidate shortlist. Please book your kick-off project call below, then confirm.</p>
+      ${bk?`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:12px 0;height:520px;background:#fff"><iframe src="${bk}" style="width:100%;height:100%;border:0" title="Book kick-off call"></iframe></div>`:`<div style="border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0;color:var(--muted);font-size:13px">Booking link will appear here. Please contact Untapped — no region set for your account.</div>`}
+      <button class="btn" style="width:100%;margin-top:8px" onclick="App.obBooked()">I've booked my kick-off call →</button>
+      ${bk?`<p class="muted" style="font-size:12px;margin-top:8px;text-align:center">Booking not loading? <a href="${bk}" target="_blank" rel="noopener" style="color:var(--muted)">Open the booking page ↗</a></p>`:''}
+    </div></div>`; return;
+  }
+  // shortlist — the candidate presentation page (terminal for now; later stages: Work Order → Direct Debit → dashboard)
+  const list=(OB&&OB.shortlist)||[];
+  if(!list.length){
+    el.innerHTML=`<div class="center"><div class="card" style="max-width:560px;width:100%;text-align:center">
+      <div class="heatrule" style="margin:0 auto 14px"></div>
+      <h1 style="font-size:24px">You're all set — thank you ✓</h1>
+      <p class="muted" style="font-size:15px">Kick-off booked. Our delivery team is now preparing your candidate shortlist — you'll be notified when it's ready to review here.</p>
+      <button class="btn ghost sm" style="margin-top:14px" onclick="App.obRefresh()">Refresh</button>
+    </div></div>`; return;
+  }
+  el.innerHTML=`<div class="center" style="align-items:flex-start"><div style="max-width:780px;width:100%;padding:8px 0">
+    <div class="heatrule" style="max-width:120px"></div>
+    <h1 style="font-size:26px;margin:12px 0 2px">Your candidate shortlist</h1>
+    <p class="muted" style="font-size:14px;margin-top:0">Review each candidate's profile and cost, then request an interview, a second interview, or make an offer. Need a chat first? Request a check-in with your delivery lead.</p>
+    <div style="text-align:right;margin:6px 0 14px"><button class="btn ghost sm" onclick="App.reqCheckin()">Request check-in with delivery lead</button></div>
+    ${list.map(c=>obCandidateCard(c)).join('')}
+    <p class="muted" style="font-size:12px;text-align:center;margin-top:18px">Untapped · ${esc(co)}</p>
   </div></div>`;
+}
+function obCandidateCard(c){
+  const reqs=(c.requests||[]).map(r=>r.label).filter((v,i,a)=>a.indexOf(v)===i);
+  const cvSrc=c.hasCV?('/.netlify/functions/cv?w='+encodeURIComponent(wsId)+'&c='+encodeURIComponent(c.id)):'';
+  return `<div class="card" style="margin-bottom:16px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div><h3 style="margin:0;font-size:19px">${esc(c.name||'Candidate')}</h3>
+        ${c.commentary?`<span style="display:inline-block;margin-top:6px;background:rgba(255,105,0,.14);color:#ffb27a;border:1px solid rgba(255,105,0,.3);border-radius:20px;padding:3px 12px;font-size:12px">${esc(c.commentary)}</span>`:''}</div>
+      <div style="text-align:right"><div class="muted" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase">Total cost</div><div style="font-family:Iowan Old Style,Georgia,serif;font-size:24px">£${(Number(c.totalCost)||0).toLocaleString('en-GB',{maximumFractionDigits:0})}<span class="muted" style="font-size:13px">/mo</span></div></div>
+    </div>
+    ${cvSrc?`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:12px 0;height:420px;background:#fff"><iframe src="${cvSrc}" style="width:100%;height:100%;border:0" title="Candidate profile"></iframe></div>`:`<div style="border:1px dashed var(--line);border-radius:10px;padding:18px;margin:12px 0;color:var(--muted);font-size:13px;text-align:center">Profile document is being finalised.</div>`}
+    ${reqs.length?`<div class="muted" style="font-size:12px;margin-bottom:8px">Requested: ${reqs.map(esc).join(' · ')}</div>`:''}
+    <div class="row" style="gap:8px">
+      <button class="btn sm" onclick="App.shortAction('${c.id}','interview')">Request interview</button>
+      <button class="btn ghost sm" onclick="App.shortAction('${c.id}','second')">Request 2nd interview</button>
+      <button class="btn ghost sm" style="border-color:#34c759;color:#7ee2a0" onclick="App.shortAction('${c.id}','offer')">Make offer</button>
+    </div>
+  </div>`;
 }
 async function obVerify(sid){
   el.innerHTML=`<div class="center"><div class="card" style="max-width:460px;width:100%;text-align:center"><div class="heatrule" style="margin:0 auto 14px"></div><h2>Confirming your payment…</h2><p class="muted" style="font-size:13px">One moment.</p></div></div>`;
   const j=await api('verifyCheckout',{sessionId:sid});
   OB=(j&&j.onboarding)||OB;
   try{ history.replaceState(null,'',location.pathname+'?w='+wsId); }catch(e){}
-  if(OB&&OB.paid){ obFunnel(OB.questionnaireDone?'done':'quiz'); }
+  if(OB&&OB.paid){ obFunnel(obStepFor(OB)); }
   else { el.innerHTML=`<div class="center"><div class="card" style="max-width:460px;width:100%;text-align:center"><div class="heatrule" style="margin:0 auto 14px"></div><h2>We couldn't confirm payment yet</h2><p class="muted" style="font-size:13px">If you completed payment it may take a moment. You can retry below.</p><button class="btn" style="width:100%;margin-top:14px" onclick="App.obGo('pay')">Back to payment</button></div></div>`; }
 }
 
@@ -639,7 +679,11 @@ const App={
   obStaff:()=>{ try{history.replaceState(null,'',location.pathname+'?w='+wsId);}catch(e){} unlock(); },
   obSign:async()=>{ const name=$('#ob_name').value.trim(), agree=$('#ob_agree').checked, err=$('#ob_err'); if(name.length<2){err.textContent='Please enter your full name.';return;} if(!agree){err.textContent='Please tick the box to agree to the terms.';return;} err.textContent=''; const j=await api('submitSignature',{name}); if(j.ok){OB=j.onboarding;obFunnel('pay');} else err.textContent=j.error||'Could not save your signature.'; },
   obPay:async()=>{ const err=$('#ob_err'); err.textContent='Opening secure payment…'; const j=await api('createCheckout'); if(j.ok&&j.url){ location.href=j.url; } else { err.textContent=j.error==='payment not configured'?'Payment isn’t switched on yet — please contact Untapped.':(j.error||'Could not start payment.'); } },
-  obQuizDone:async()=>{ const j=await api('markQuestionnaireDone'); if(j.ok){OB=j.onboarding;obFunnel('done');} else toast(j.error||'Failed'); },
+  obQuizDone:async()=>{ const j=await api('markQuestionnaireDone'); if(j.ok){OB=j.onboarding;obFunnel('book');} else toast(j.error||'Failed'); },
+  obBooked:async()=>{ const j=await api('markBooked'); if(j.ok){OB=j.onboarding;obFunnel('shortlist');} else toast(j.error||'Failed'); },
+  obRefresh:async()=>{ const j=await api('onboardingStatus'); if(j.ok){OB=j.onboarding;obFunnel(obStepFor(OB));} },
+  shortAction:async(id,act)=>{ const labels={interview:'Interview requested',second:'2nd interview requested',offer:'Offer sent to Untapped'}; const j=await api('shortlistAction',{candidateId:id,act}); if(j.ok){OB=j.onboarding;obFunnel('shortlist');toast(labels[act]||'Sent');} else toast(j.error||'Failed'); },
+  reqCheckin:async()=>{ const note=prompt('Request a check-in with your delivery lead. Anything you’d like to cover? (optional)'); if(note===null)return; const j=await api('requestCheckin',{note}); toast(j.ok?'Check-in requested — your delivery lead will be in touch':(j.error||'Failed')); },
 };
 /* live auto-refresh for the customer dashboard (every 30s, paused when tab hidden or editing) */
 async function autoTick(){
