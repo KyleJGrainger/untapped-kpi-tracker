@@ -301,6 +301,12 @@ exports.handler = async (event) => {
     ws.onboarding.signed = null; ws.onboarding.paid = null; ws.onboarding.questionnaireDone = false; ws.onboarding.status = 'pending';
     await save(); return json(200, { ok: true });
   }
+  if (action === 'deleteWorkspace') {
+    if (!isAdmin) return json(403, { error: 'admin only' });
+    if (String(b.confirm) !== 'DELETE') return json(400, { error: 'confirmation required' });
+    await store.delete(wsId);
+    return json(200, { ok: true, deleted: true });
+  }
   if (action === 'addCommission') {
     if (!isManager) return json(403, { error: 'forbidden' });
     ws.commissions = ws.commissions || [];
