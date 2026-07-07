@@ -107,6 +107,13 @@ exports.handler = async (event) => {
   const H = event.headers || {};
   const reqHost = H['x-forwarded-host'] || H['host'] || '';
   const reqBase = reqHost ? `${H['x-forwarded-proto'] || 'https'}://${reqHost}` : (process.env.SITE_URL || '');
+  // Diagnostic: reports which env vars the running function can see (booleans/length only — never values).
+  if (b.action === 'envcheck') {
+    return json(200, { ok: true, host: reqHost,
+      hasToken: !!process.env.NETLIFY_BLOBS_TOKEN, tokenLen: (process.env.NETLIFY_BLOBS_TOKEN || '').length,
+      hasSiteId: !!process.env.BLOBS_SITE_ID, siteId: process.env.BLOBS_SITE_ID || null,
+      hasResend: !!process.env.RESEND_API_KEY, hasStripe: !!process.env.STRIPE_SECRET_KEY });
+  }
   const { getStore } = await import('@netlify/blobs');
   const store = getStore(process.env.NETLIFY_BLOBS_TOKEN
     ? { name: 'kpi-workspaces', siteID: process.env.BLOBS_SITE_ID, token: process.env.NETLIFY_BLOBS_TOKEN }
