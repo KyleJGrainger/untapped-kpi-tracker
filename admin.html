@@ -104,31 +104,52 @@ function go(v){view=v;console_();}
 function lock(){KEY=null;try{sessionStorage.removeItem('untapped_admin_key')}catch(e){}keyView();$('#topr').innerHTML='';}
 
 function monthKey(iso){const d=new Date(iso);return isNaN(d)?'Unknown':d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});}
+const KCOLS=[['sent','Awaiting signature'],['paid','Awaiting payment'],['questionnaire','Questionnaire'],['booked','Kick-off booking'],['shortlist','Shortlist'],['workorder','Work Order'],['directdebit','Direct Debit'],['active','Active']];
+let clientView_mode='board';
 async function clientsView(){
   const box=$('#body');box.innerHTML='<div class="empty">Loading…</div>';
   const j=await api('adminList');
   if(!j.ok){box.innerHTML='<div class="empty">'+(j.error||'Failed to load')+'</div>';return;}
-  const cl=j.clients||[];
+  const cl=(j.clients||[]).filter(c=>c.required||c.stage!=='no-onboarding');
   const outstanding=cl.filter(c=>c.required&&!c.signed).length;
   if(!cl.length){box.innerHTML='<div class="empty">No clients yet. Use “+ New client” to set one up.</div>';return;}
-  // group by month sent
-  const groups={};
-  cl.forEach(c=>{const m=monthKey(c.sentAt);(groups[m]=groups[m]||[]).push(c);});
-  let html=`<p class="muted" style="font-size:14px;margin:4px 0 8px"><b style="color:#fff">${cl.length}</b> client${cl.length===1?'':'s'} · <b style="color:#ff8a80">${outstanding}</b> outstanding MSA${outstanding===1?'':'s'} (sent, not yet signed)</p>`;
-  Object.keys(groups).forEach(m=>{
-    html+=`<div class="month">Sent · ${m}</div>`;
-    groups[m].forEach(c=>{
-      const st=STAGES[c.stage]||['—','b-mid'];
-      const base=location.origin+'/?w='+c.id;
-      html+=`<div class="client"><div>
-          <b>${esc(c.company||'—')}</b> <span class="muted">· ${esc(c.region||'no region')} · £${(c.retainerTotal||0).toFixed(0)}</span>
-          ${c.signed?`<div class="muted" style="font-size:12px;margin-top:3px">MSA signed by ${esc(c.signed.name)} on ${new Date(c.signed.ts).toLocaleDateString('en-GB')}</div>`:`<div class="muted" style="font-size:12px;margin-top:3px">MSA not signed yet</div>`}
-        </div>
-        <div class="row"><span class="badge ${st[1]}">${st[0]}</span><button class="btn ghost sm" onclick="copy('${base}')">Copy link</button><button class="btn sm" onclick="openClient('${c.id}')">Open</button></div>
-      </div>`;
-    });
-  });
-  box.innerHTML=html;
+  const head=`<div class="row" style="justify-content:space-between;align-items:center;margin:2px 0 12px">
+      <p class="muted" style="font-size:14px;margin:0"><b style="color:#fff">${cl.length}</b> client${cl.length===1?'':'s'} · <b style="color:#ff8a80">${outstanding}</b> outstanding MSA${outstanding===1?'':'s'}</p>
+      <div class="row"><button class="btn ghost sm ${clientView_mode==='board'?'':''}" onclick="setMode('board')" style="${clientView_mode==='board'?'border-color:#FFC600;color:#fff':''}">Board</button><button class="btn ghost sm" onclick="setMode('months')" style="${clientView_mode==='months'?'border-color:#FFC600;color:#fff':''}">By month</button></div>
+    </div>`;
+  if(clientView_mode==='months'){
+    const groups={}; cl.forEach(c=>{const m=monthKey(c.sentAt);(groups[m]=groups[m]||[]).push(c);});
+    let html=head; Object.keys(groups).forEach(m=>{ html+=`<div class="month">Sent · ${m}</div>`; groups[m].forEach(c=>{ html+=clientRow(c); }); });
+    box.innerHTML=html; return;
+  }
+  // Kanban board — a column per pipeline stage; cards click into the client
+  const byStage={}; cl.forEach(c=>{(byStage[c.stage]=byStage[c.stage]||[]).push(c);});
+  const cols=KCOLS.map(([key,label])=>{
+    const items=byStage[key]||[];
+    return `<div style="min-width:230px;width:230px;flex:0 0 auto">
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 4px;border-bottom:2px solid var(--line);display:flex;justify-content:space-between"><span>${label}</span><span>${items.length||''}</span></div>
+      <div style="padding-top:8px">${items.map(c=>kanbanCard(c)).join('')||'<div style="color:var(--line);font-size:12px;padding:10px 4px">—</div>'}</div>
+    </div>`;
+  }).join('');
+  box.innerHTML=head+`<div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:12px">${cols}</div>`;
+}
+function setMode(m){clientView_mode=m;clientsView();}
+function kanbanCard(c){
+  const reqs=(c.stage==='shortlist')?'':'';
+  return `<div class="card" style="padding:12px;margin-bottom:10px;cursor:pointer" onclick="openClient('${c.id}')">
+    <b style="font-size:14px">${esc(c.company||'—')}</b>
+    <div class="muted" style="font-size:12px;margin-top:3px">${esc(c.region||'no region')} · £${(c.retainerTotal||0).toFixed(0)}/mo</div>
+    <div class="muted" style="font-size:11px;margin-top:5px">${c.signed?('MSA signed '+new Date(c.signed.ts).toLocaleDateString('en-GB')):'Sent '+(c.sentAt?new Date(c.sentAt).toLocaleDateString('en-GB'):'—')}</div>
+  </div>`;
+}
+function clientRow(c){
+  const st=STAGES[c.stage]||['—','b-mid']; const base=location.origin+'/?w='+c.id;
+  return `<div class="client"><div>
+      <b>${esc(c.company||'—')}</b> <span class="muted">· ${esc(c.region||'no region')} · £${(c.retainerTotal||0).toFixed(0)}</span>
+      ${c.signed?`<div class="muted" style="font-size:12px;margin-top:3px">MSA signed by ${esc(c.signed.name)} on ${new Date(c.signed.ts).toLocaleDateString('en-GB')}</div>`:`<div class="muted" style="font-size:12px;margin-top:3px">MSA not signed yet</div>`}
+    </div>
+    <div class="row"><span class="badge ${st[1]}">${st[0]}</span><button class="btn ghost sm" onclick="event.stopPropagation();copy('${base}')">Copy link</button><button class="btn sm" onclick="openClient('${c.id}')">Open</button></div>
+  </div>`;
 }
 
 async function openClient(id){
