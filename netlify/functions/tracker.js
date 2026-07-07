@@ -244,8 +244,12 @@ exports.handler = async (event) => {
     const saveW = async () => { await store.setJSON(b.wsId, w); };
     if (action === 'adminGetClient') {
       const o = w.onboarding;
+      const firstCand = (w.candidates || [])[0] || {};
       return json(200, { ok: true, client: {
         id: w.id, company: w.company, region, customerEmail: w.customerEmail || '',
+        clientPin: w.customerPin || '',
+        candidateName: firstCand.name || '',
+        candidatePin: o.woDone ? (firstCand.candidatePin || '') : null, // hidden until the Work Order is signed
         retainerPerHire: o.retainerPerHire, hires: o.hires, vat: !!o.vat,
         signed: o.signed || null, paid: o.paid || null, questionnaireDone: !!o.questionnaireDone,
         booked: o.booked || null, hired: o.hired || null, woDone: o.woDone || null, ddDone: o.ddDone || null,
