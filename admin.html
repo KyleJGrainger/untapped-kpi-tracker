@@ -166,7 +166,7 @@ async function openClient(id){
     return `<div class="card" style="margin-top:10px">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><b style="font-size:16px">${esc(cand.name)}</b>${cand.commentary?`<div class="muted" style="font-size:13px;margin-top:3px">“${esc(cand.commentary)}”</div>`:''}</div>
-        <button class="btn ghost sm" style="border-color:#DA291C;color:#ff8a80" onclick="removeCand('${c.id}','${cand.id}')">Remove</button>
+        <div class="row">${(c.hired&&c.hired.candidateId===cand.id)?'<span class="badge b-active">★ Hired</span>':`<button class="btn sm" onclick="setHired('${c.id}','${cand.id}')">Mark as hired</button>`}<button class="btn ghost sm" style="border-color:#DA291C;color:#ff8a80" onclick="removeCand('${c.id}','${cand.id}')">Remove</button></div>
       </div>
       <div style="margin-top:10px;font-size:14px" class="muted">Salary £${(cand.salary||0).toLocaleString('en-GB')}/mo → service charge ${Math.round(cand.pct*100)}% + ${esc(cand.feeLabel)} £${cand.fee} → <b style="color:#fff">client sees £${(cand.totalCost||0).toLocaleString('en-GB',{maximumFractionDigits:0})}/mo</b></div>
       <div class="grid2" style="margin-top:10px">
@@ -183,9 +183,10 @@ async function openClient(id){
   box.innerHTML=`
     <h1 style="font-size:23px;margin:6px 0 2px">${esc(c.company)}</h1>
     <p class="muted" style="font-size:13px">${esc(c.region||'—')} · retainer £${((c.vat?c.retainerPerHire*c.hires*1.2:c.retainerPerHire*c.hires)||0).toFixed(0)} · <a href="${location.origin+'/?w='+c.id}" target="_blank" style="color:#ffb27a">client link ↗</a></p>
-    <div style="margin:12px 0">${step(!!c.signed,'MSA signed')}${step(!!c.paid,'Retainer paid')}${step(!!c.questionnaireDone,'Questionnaire')}${step(!!c.booked,'Kick-off booked')}</div>
+    <div style="margin:12px 0">${step(!!c.signed,'MSA signed')}${step(!!c.paid,'Retainer paid')}${step(!!c.questionnaireDone,'Questionnaire')}${step(!!c.booked,'Kick-off booked')}${step(!!c.hired,'Hired')}${step(!!c.woDone,'Work Order')}${step(!!c.ddDone,'Direct Debit')}</div>
     <div class="month">Candidate shortlist</div>
     ${cards}
+    ${c.hired?workOrderEditor(c):''}
     <div class="card" style="margin-top:14px">
       <b style="font-size:15px">Add a candidate</b>
       <div class="grid2" style="margin-top:10px">
@@ -198,6 +199,34 @@ async function openClient(id){
       <p class="muted" style="font-size:12px;margin-top:6px">Add the candidate, then use “Upload CV” on their card to attach the profile PDF.</p>
     </div>`;
 }
+function workOrderEditor(c){
+  const wo=c.workOrder||{}; const cl=wo.client||{};
+  return `<div class="month">Work Order — ${esc((c.hired&&c.hired.name)||'the hire')}</div>
+    <div class="card">
+      <p class="muted" style="font-size:13px;margin:0 0 10px">Fill in the hire details below. The client sees these (read-only) in their funnel, adds their own company details, and signs.</p>
+      <div class="grid2">
+        <div><label class="fl">Job title</label><input id="wo_jt" value="${esc(wo.jobTitle||'')}"></div>
+        <div><label class="fl">Start date</label><input id="wo_sd" value="${esc(wo.startDate||'')}" placeholder="e.g. 1 Aug 2026"></div>
+      </div>
+      <div class="grid2">
+        <div><label class="fl">Gross salary (£/mo)</label><input id="wo_gs" type="number" min="0" step="50" value="${Number(wo.grossSalaryMonthly)||0}"></div>
+        <div><label class="fl">Notice period</label><input id="wo_np" value="${esc(wo.noticePeriod||'1 Calendar Month')}"></div>
+      </div>
+      <div class="grid2">
+        <div><label class="fl">Annual leave (days)</label><input id="wo_al" type="number" min="0" value="${wo.annualLeaveDays!=null?wo.annualLeaveDays:15}"></div>
+        <div><label class="fl">Sick leave (days)</label><input id="wo_sl" type="number" min="0" value="${wo.sickLeaveDays!=null?wo.sickLeaveDays:12}"></div>
+      </div>
+      <label class="fl">Job description</label><textarea id="wo_jd" style="width:100%;min-height:70px;background:#0d0f14;border:1px solid var(--line);border-radius:9px;color:#fff;padding:10px">${esc(wo.jobDescription||'')}</textarea>
+      <label class="fl">Commission / bonus details (optional)</label><input id="wo_cd" value="${esc(wo.commissionDetails||'')}">
+      <button class="btn sm" style="margin-top:10px" onclick="saveWO('${c.id}')">Save Work Order details</button>
+      ${wo.signed?`<div class="card" style="margin-top:12px;background:#0d0f14"><b style="font-size:14px;color:#7ee2a0">✓ Signed by the client</b>
+        <div class="muted" style="font-size:13px;margin-top:6px">Signed by ${esc(wo.signed.name)} · ${new Date(wo.signed.ts).toLocaleString('en-GB')}</div>
+        <div class="muted" style="font-size:13px;margin-top:6px">${esc(cl.companyName||'')} · Reg ${esc(cl.companyRegNumber||'')}<br>${esc(cl.companyAddress||'')}<br>Contact: ${esc(cl.contactName||'')} · ${esc(cl.hiringManagerEmail||'')}<br>Accounts: ${esc(cl.accountsEmail||'')}</div></div>`
+        :'<div class="muted" style="font-size:12px;margin-top:8px">Awaiting the client to add their details &amp; sign in their funnel.</div>'}
+    </div>`;
+}
+async function setHired(id,cid){if(!confirm('Mark this candidate as hired? This moves the client to the Work Order stage.'))return;const j=await api('adminSetHired',{wsId:id,candidateId:cid});if(j.ok){toast('Marked as hired');openClient(id);}else toast(j.error||'Failed');}
+async function saveWO(id){const wo={jobTitle:$('#wo_jt').value,startDate:$('#wo_sd').value,grossSalaryMonthly:$('#wo_gs').value,noticePeriod:$('#wo_np').value,annualLeaveDays:$('#wo_al').value,sickLeaveDays:$('#wo_sl').value,jobDescription:$('#wo_jd').value,commissionDetails:$('#wo_cd').value};const j=await api('adminSaveWorkOrder',{wsId:id,wo});if(j.ok){toast('Work Order saved');openClient(id);}else toast(j.error||'Failed');}
 async function addCand(id){const name=$('#nc_name').value.trim(),salary=$('#nc_sal').value,commentary=$('#nc_comm').value.trim();if(!name){$('#nc_err').textContent='Enter a name.';return;}const j=await api('adminAddCandidate',{wsId:id,name,salary,commentary});if(j.ok){toast('Candidate added');openClient(id);}else $('#nc_err').textContent=j.error||'Failed';}
 async function saveSalary(id,cid){const salary=$('#sal_'+cid).value;const j=await api('adminUpdateCandidate',{wsId:id,candidateId:cid,salary});if(j.ok){toast('Salary saved');openClient(id);}else toast(j.error||'Failed');}
 async function removeCand(id,cid){if(!confirm('Remove this candidate from the shortlist?'))return;const j=await api('adminRemoveCandidate',{wsId:id,candidateId:cid});if(j.ok){toast('Removed');openClient(id);}else toast(j.error||'Failed');}

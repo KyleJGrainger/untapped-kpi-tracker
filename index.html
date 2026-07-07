@@ -184,7 +184,8 @@ async function init(){
   }
   unlock();
 }
-function obStepFor(o){ if(!o.signed) return 'welcome'; if(!o.paid) return 'pay'; if(!o.questionnaireDone) return 'quiz'; if(!o.booked) return 'book'; return 'shortlist'; }
+function obStepFor(o){ if(!o.signed) return 'welcome'; if(!o.paid) return 'pay'; if(!o.questionnaireDone) return 'quiz'; if(!o.booked) return 'book'; if(!o.hired) return 'shortlist'; if(!o.woDone) return 'workorder'; if(!o.ddDone) return 'directdebit'; return 'done'; }
+const GOCARDLESS_URL=''; // paste your GoCardless "sign up" link here to switch on the Direct Debit step
 function route(){
   try{ if(wsId) history.replaceState(null,'',location.pathname+'?w='+wsId); }catch(e){} // keep recoverable link in the address bar
   const roleLabel=role==='admin'?'Untapped admin':role==='customer'?'Customer':'Candidate';
@@ -334,7 +335,46 @@ function obFunnel(step){
       ${bk?`<p class="muted" style="font-size:12px;margin-top:8px;text-align:center">Booking not loading? <a href="${bk}" target="_blank" rel="noopener" style="color:var(--muted)">Open the booking page ↗</a></p>`:''}
     </div></div>`; return;
   }
-  // shortlist — the candidate presentation page (terminal for now; later stages: Work Order → Direct Debit → dashboard)
+  if(step==='workorder'){
+    const wo=(OB&&OB.workOrder)||{};
+    const row=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px"><span class="muted">${l}</span><span style="text-align:right">${esc(v||'—')}</span></div>`;
+    el.innerHTML=`<div class="center" style="align-items:flex-start"><div class="card" style="max-width:680px;width:100%">
+      <div class="heatrule"></div><div class="lab">Work Order</div>
+      <h1 style="font-size:24px">Raise your candidate contract</h1>
+      <p class="muted" style="font-size:14px">Congratulations on your hire. Review the details below (prepared by Untapped), add your company details, and sign to raise the Work Order.</p>
+      <div style="margin:14px 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">The hire</div>
+      ${row('Employee',wo.employeeName)}${row('Job title',wo.jobTitle)}${row('Start date',wo.startDate)}${row('Gross salary','£'+(Number(wo.grossSalaryMonthly)||0).toLocaleString('en-GB')+'/mo')}${row('Annual leave',(wo.annualLeaveDays!=null?wo.annualLeaveDays+' days':''))}${row('Sick leave',(wo.sickLeaveDays!=null?wo.sickLeaveDays+' days':''))}${row('Notice period',wo.noticePeriod)}${wo.jobDescription?`<div style="padding:8px 0;font-size:13px" class="muted">${esc(wo.jobDescription)}</div>`:''}
+      <div style="margin:16px 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Your company details</div>
+      <div class="grid2"><div><label class="fl">Company name</label><input id="wo_cn"></div><div><label class="fl">Company reg. number</label><input id="wo_rn"></div></div>
+      <label class="fl">Company address</label><input id="wo_ad">
+      <div class="grid2"><div><label class="fl">Contact name</label><input id="wo_ct"></div><div><label class="fl">Hiring manager email</label><input id="wo_hm" type="email"></div></div>
+      <label class="fl">Accounts email (for invoicing)</label><input id="wo_ac" type="email">
+      <label class="fl" style="margin-top:12px">Full name (signature)</label><input id="wo_sig">
+      <label class="row" style="align-items:center;gap:10px;margin-top:10px;cursor:pointer;font-size:14px"><input type="checkbox" id="wo_agree" style="width:18px;height:18px"> I confirm these details and agree to this Work Order on behalf of my company.</label>
+      <div class="err" id="wo_err"></div>
+      <button class="btn" style="width:100%;margin-top:6px" onclick="App.obSubmitWO()">Sign &amp; raise Work Order →</button>
+    </div></div>`; return;
+  }
+  if(step==='directdebit'){
+    el.innerHTML=`<div class="center"><div class="card" style="max-width:520px;width:100%;text-align:center">
+      <div class="heatrule" style="margin:0 auto 14px"></div>${obStepper('shortlist')}
+      <h1 style="font-size:24px">Set up your Direct Debit</h1>
+      <p class="muted" style="font-size:14px">Work Order signed ✓ — the final step. Set up your Direct Debit securely with GoCardless, then confirm below to unlock your dashboard.</p>
+      ${GOCARDLESS_URL?`<a class="btn" style="display:inline-block;width:100%;box-sizing:border-box;text-decoration:none;margin-top:10px" href="${GOCARDLESS_URL}" target="_blank" rel="noopener">Set up Direct Debit with GoCardless ↗</a>`:`<div style="border:1px dashed var(--line);border-radius:10px;padding:16px;margin:12px 0;color:var(--muted);font-size:13px">The GoCardless sign-up link isn't configured yet. Please contact Untapped.</div>`}
+      <button class="btn ghost" style="width:100%;margin-top:10px" onclick="App.obDD()">I've set up my Direct Debit →</button>
+    </div></div>`; return;
+  }
+  if(step==='done'){
+    const pin=(OB&&OB.clientPin)||'';
+    el.innerHTML=`<div class="center"><div class="card" style="max-width:520px;width:100%;text-align:center">
+      <div class="heatrule" style="margin:0 auto 14px"></div>
+      <h1 style="font-size:26px">You're all set ✓</h1>
+      <p class="muted" style="font-size:15px">Onboarding complete, ${esc(co)} — welcome aboard. Your dashboard is now unlocked.</p>
+      ${pin?`<div class="share" style="margin-top:12px"><b>Your dashboard PIN</b><br><span style="font-size:22px;letter-spacing:.2em">${esc(pin)}</span><br><span class="muted" style="font-size:12px">Keep this safe — you'll use it to log in.</span></div>`:''}
+      <button class="btn" style="width:100%;margin-top:14px" onclick="App.obStaff()">Enter your dashboard →</button>
+    </div></div>`; return;
+  }
+  // shortlist — the candidate presentation page (client reviews candidates while Untapped finalises the hire)
   const list=(OB&&OB.shortlist)||[];
   if(!list.length){
     el.innerHTML=`<div class="center"><div class="card" style="max-width:560px;width:100%;text-align:center">
@@ -684,6 +724,8 @@ const App={
   obRefresh:async()=>{ const j=await api('onboardingStatus'); if(j.ok){OB=j.onboarding;obFunnel(obStepFor(OB));} },
   shortAction:async(id,act)=>{ const labels={interview:'Interview requested',second:'2nd interview requested',offer:'Offer sent to Untapped'}; const j=await api('shortlistAction',{candidateId:id,act}); if(j.ok){OB=j.onboarding;obFunnel('shortlist');toast(labels[act]||'Sent');} else toast(j.error||'Failed'); },
   reqCheckin:async()=>{ const note=prompt('Request a check-in with your delivery lead. Anything you’d like to cover? (optional)'); if(note===null)return; const j=await api('requestCheckin',{note}); toast(j.ok?'Check-in requested — your delivery lead will be in touch':(j.error||'Failed')); },
+  obSubmitWO:async()=>{ const err=$('#wo_err'); const client={companyName:$('#wo_cn').value.trim(),companyRegNumber:$('#wo_rn').value.trim(),companyAddress:$('#wo_ad').value.trim(),contactName:$('#wo_ct').value.trim(),hiringManagerEmail:$('#wo_hm').value.trim(),accountsEmail:$('#wo_ac').value.trim()}; const name=$('#wo_sig').value.trim(); if(!client.companyName||!client.companyRegNumber){err.textContent='Please add your company name and registration number.';return;} if(!client.hiringManagerEmail||!client.accountsEmail){err.textContent='Please add both email addresses.';return;} if(name.length<2){err.textContent='Type your full name to sign.';return;} if(!$('#wo_agree').checked){err.textContent='Please tick to confirm.';return;} err.textContent=''; const j=await api('submitWorkOrder',{client,name}); if(j.ok){OB=j.onboarding;obFunnel(obStepFor(OB));toast('Work Order signed');} else err.textContent=j.error||'Failed'; },
+  obDD:async()=>{ const j=await api('markDD'); if(j.ok){OB=j.onboarding;obFunnel('done');} else toast(j.error||'Failed'); },
 };
 /* live auto-refresh for the customer dashboard (every 30s, paused when tab hidden or editing) */
 async function autoTick(){
