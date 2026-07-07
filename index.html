@@ -510,7 +510,7 @@ function candidateApp(){
     <div id="kbody"></div>`;
   renderKBody();
 }
-let tab2='log';
+let tab2='log', blockerDraft='';
 function renderKBody(){
   const c=ME, box=$('#kbody');
   if(tab2==='log'){
@@ -521,8 +521,11 @@ function renderKBody(){
     renderLog();
   } else if(tab2==='pulse'){
     const wk=weekKey(new Date()); const p=(c.pulse||{})[wk]||{};
+    const allP=Object.values(c.pulse||{}).filter(x=>x&&x.ts).sort((a,b)=>b.ts.localeCompare(a.ts));
+    const lastLine=allP.length?`Last submitted: ${new Date(allP[0].ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})} at ${new Date(allP[0].ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`:'Not submitted yet.';
     const scale=(name,val)=>`<div class="scale" data-sc="${name}">${[1,2,3,4,5].map(n=>`<button class="${val===n?'on':''}" onclick="App.setScale('${name}',${n})">${n}</button>`).join('')}</div>`;
     box.innerHTML=`<div class="panel"><h3>This week's pulse</h3><p class="muted" style="font-size:13px">Quick self-rating (1 = low, 5 = high). Your customer sees the trend, not to judge — to support you.</p>
+      <p class="muted" style="font-size:12px;margin:-4px 0 8px">${lastLine}</p>
       <label class="fl">Workload</label>${scale('workload',p.workload)}
       <label class="fl">Confidence in the work</label>${scale('confidence',p.confidence)}
       <label class="fl">How supported do you feel</label>${scale('supported',p.supported)}
@@ -531,7 +534,7 @@ function renderKBody(){
     pulseDraft={workload:p.workload,confidence:p.confidence,supported:p.supported};
   } else if(tab2==='blockers'){
     box.innerHTML=`<div class="panel"><h3>Raise a blocker</h3><p class="muted" style="font-size:13px">Stuck on something? Flag it — your customer is notified and can help. Asking early is a strength.</p>
-      <textarea id="bnew" placeholder="e.g. I don't have access to the CRM yet"></textarea>
+      <textarea id="bnew" placeholder="e.g. I don't have access to the CRM yet" oninput="blockerDraft=this.value">${esc(blockerDraft)}</textarea>
       <button class="btn sm" style="margin-top:10px" onclick="App.raiseBlocker()">Raise blocker</button>
       <div style="margin-top:14px">${(c.blockers||[]).map(b=>`<div class="item"><div class="row" style="justify-content:space-between"><span class="badge ${b.resolved?'':'open'}">${b.resolved?'Resolved':'Open'}</span><span class="when">${new Date(b.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</span></div><div style="margin-top:6px">${esc(b.text)}</div>${b.resolved?'':`<button class="btn ghost sm" style="margin-top:8px" onclick="App.resolve('${b.id}')">Mark resolved</button>`}</div>`).join('')||'<div class="empty">No blockers — nice.</div>'}</div></div>`;
   } else if(tab2==='journey'){ box.innerHTML=embedHTML('https://untapped-journey.netlify.app/','Your Untapped journey guide');
@@ -557,7 +560,7 @@ const App={
   createForm, doCreate,
   enter:async()=>{await refresh();route();},
   copy:t=>{navigator.clipboard?.writeText(t).then(()=>toast('Copied')).catch(()=>toast('Copy failed'));},
-  lock:()=>{clearSession();pin=null;role=null;WS=null;ME=null;location.search='';},
+  lock:()=>{clearSession();pin=null;role=null;WS=null;ME=null;location.search=wsId?('?w='+wsId):'';},
   unlock:async()=>{const v=$('#pin').value.trim();pin=v;const okv=await refresh();if(okv){saveSession();route();}else{$('#p_err').textContent='Incorrect PIN.';pin=null;}},
   digest:async()=>{const j=await api('digestNow');toast(j.ok?'Digest emailed':(j.note||'Email not configured'));},
   addCand:async()=>{const name=prompt('Candidate name?');if(!name)return;const cp=prompt('Set a 4-digit candidate PIN for them:');if(!/^\d{4}$/.test(cp||'')){alert('PIN must be 4 digits');return;}const j=await api('addCandidate',{name,candidatePin:cp});if(j.ok){await refresh();activeId=j.candidateId;cTab='share';customerApp();toast('Candidate added');}else toast(j.error||'Failed');},
@@ -577,8 +580,8 @@ const App={
   toggle:async id=>{const pk=periodKey();ME.logs[tab]=ME.logs[tab]||{};ME.logs[tab][pk]=ME.logs[tab][pk]||{};const nv=!ME.logs[tab][pk][id];ME.logs[tab][pk][id]=nv;renderLog();await api('saveLog',{candidateId:ME.id,period:tab,periodKey:pk,kpiId:id,value:nv});},
   setNum:async(id,v)=>{const pk=periodKey();ME.logs[tab]=ME.logs[tab]||{};ME.logs[tab][pk]=ME.logs[tab][pk]||{};const val=v===''?null:Number(v);if(val===null)delete ME.logs[tab][pk][id];else ME.logs[tab][pk][id]=val;const i=$('#dash');clearTimeout(App._n);App._n=setTimeout(()=>{const cur=completion(ME.kpis,ME.logs,tab,periodKey())||0;},10);await api('saveLog',{candidateId:ME.id,period:tab,periodKey:pk,kpiId:id,value:val});},
   setScale:(name,n)=>{pulseDraft[name]=n;document.querySelectorAll(`[data-sc="${name}"] button`).forEach((b,i)=>b.classList.toggle('on',i+1===n));},
-  savePulse:async()=>{const wk=weekKey(new Date());const note=$('#pnote').value;const j=await api('savePulse',{candidateId:ME.id,weekKey:wk,workload:pulseDraft.workload,confidence:pulseDraft.confidence,supported:pulseDraft.supported,note});if(j.ok){ME.pulse=ME.pulse||{};ME.pulse[wk]={...pulseDraft,note};$('#pok').textContent='Saved ✓';}},
-  raiseBlocker:async()=>{const t=$('#bnew').value.trim();if(!t)return;const j=await api('addBlocker',{candidateId:ME.id,text:t});if(j.ok){await refresh();renderKBody();toast('Blocker raised');}},
+  savePulse:async()=>{const wk=weekKey(new Date());const note=$('#pnote').value;const ts=new Date().toISOString();const j=await api('savePulse',{candidateId:ME.id,weekKey:wk,workload:pulseDraft.workload,confidence:pulseDraft.confidence,supported:pulseDraft.supported,note,ts});if(j.ok){ME.pulse=ME.pulse||{};ME.pulse[wk]={...pulseDraft,note,ts};$('#pok').textContent='Saved ✓';}},
+  raiseBlocker:async()=>{const t=$('#bnew').value.trim();if(!t)return;const j=await api('addBlocker',{candidateId:ME.id,text:t});if(j.ok){blockerDraft='';await refresh();renderKBody();toast('Blocker raised');}},
   // customer view switch
   cView:v=>{cView=v;customerApp();},
   // time off — customer
