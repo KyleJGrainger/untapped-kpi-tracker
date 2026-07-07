@@ -350,6 +350,7 @@ exports.handler = async (event) => {
     signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone,
     booked: !!ws.onboarding.booked, hired: !!ws.onboarding.hired, woDone: !!ws.onboarding.woDone, ddDone: !!ws.onboarding.ddDone,
     hiredName: (ws.onboarding.hired || {}).name || '',
+    signedCompany: (ws.onboarding.signed || {}).company || null,
     // Work Order — the Untapped-filled parts the client reviews before adding their own details + signing
     workOrder: ws.onboarding.workOrder ? {
       employeeName: ws.onboarding.workOrder.employeeName || '', jobTitle: ws.onboarding.workOrder.jobTitle || '',
@@ -379,11 +380,16 @@ exports.handler = async (event) => {
     if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
     const name = String(b.name || '').trim();
     if (name.length < 2) return json(400, { error: 'enter your full name' });
+    const co = b.company || {};
+    const companyName = String(co.name || '').trim(), regNumber = String(co.regNumber || '').trim();
+    if (companyName.length < 2) return json(400, { error: 'enter your company name' });
+    if (regNumber.length < 1) return json(400, { error: 'enter your company registration number' });
+    const company = { name: companyName, regNumber, address: String(co.address || '').slice(0, 400) };
     const ip = (H['x-nf-client-connection-ip'] || (H['x-forwarded-for'] || '').split(',')[0] || '').trim();
-    ws.onboarding.signed = { name, ip, ts: new Date().toISOString() };
+    ws.onboarding.signed = { name, company, ip, ts: new Date().toISOString() };
     obRecompute(); await obSave();
-    const sBody = `<p style="font-size:15px;color:#333"><b>${esc(name)}</b> has signed the terms for <b>${esc(ws.company || 'a new client')}</b>.</p><p style="color:#777;font-size:13px">Signed ${new Date().toLocaleString('en-GB')} · IP ${esc(ip || 'n/a')}. Awaiting retainer payment (£${obTotal().toFixed(0)}).</p>`;
-    await mail(TEAM, `Terms signed — ${ws.company || 'new client'}`, emailWrap('Terms signed', sBody, ws, reqBase));
+    const sBody = `<p style="font-size:15px;color:#333"><b>${esc(name)}</b> has signed the terms for <b>${esc(companyName)}</b>.</p><p style="color:#777;font-size:13px">Company: ${esc(companyName)} · Reg ${esc(regNumber)}${company.address ? '<br>' + esc(company.address) : ''}<br>Signed ${new Date().toLocaleString('en-GB')} · IP ${esc(ip || 'n/a')}. Awaiting retainer payment (£${obTotal().toFixed(0)}).</p>`;
+    await mail(TEAM, `Terms signed — ${companyName}`, emailWrap('Terms signed', sBody, ws, reqBase));
     return json(200, { ok: true, onboarding: obPublic() });
   }
   if (action === 'createCheckout') {
