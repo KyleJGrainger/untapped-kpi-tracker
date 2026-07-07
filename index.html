@@ -185,7 +185,7 @@ async function init(){
   unlock();
 }
 function obStepFor(o){ if(!o.signed) return 'welcome'; if(!o.paid) return 'pay'; if(!o.questionnaireDone) return 'quiz'; if(!o.booked) return 'book'; if(!o.hired) return 'shortlist'; if(!o.woDone) return 'workorder'; if(!o.ddDone) return 'directdebit'; return 'done'; }
-const GOCARDLESS_URL=''; // paste your GoCardless "sign up" link here to switch on the Direct Debit step
+const GOCARDLESS_URL='https://pay.gocardless.com/billing/static/collect-customer-details?id=BRF01KWZ1XZKSK09YMMDN98Y86KWQ5F2&initial=%2Fcollect-customer-details';
 function route(){
   try{ if(wsId) history.replaceState(null,'',location.pathname+'?w='+wsId); }catch(e){} // keep recoverable link in the address bar
   const roleLabel=role==='admin'?'Untapped admin':role==='customer'?'Customer':'Candidate';
