@@ -270,10 +270,16 @@ function obStepper(active){
   }).join('<span style="color:rgba(255,255,255,.2)">—</span>')}</div>`;
 }
 function obStaffLink(){ return `<p class="muted" style="font-size:12px;margin-top:16px;text-align:center">Untapped staff or already onboarded? <a href="#" onclick="App.obStaff();return false" style="color:var(--muted);text-decoration:underline">Enter PIN</a></p>`; }
+function msaText(region){
+  if(region==='Philippines'){ return `<b style="color:#fff">Untapped — Master Services Agreement (Philippines)</b><br><br>[PLACEHOLDER — paste your Philippines MSA here.] This agreement governs the engagement between Untapped and the client for talent placed in the Philippines.<br><br>1. Scope of services. [PLACEHOLDER]<br><br>2. Retainer &amp; fees. [PLACEHOLDER]<br><br>3. Confidentiality. [PLACEHOLDER]<br><br>4. Term &amp; termination. [PLACEHOLDER]<br><br>5. Liability. [PLACEHOLDER]`; }
+  if(region==='South Africa'){ return `<b style="color:#fff">Untapped — Master Services Agreement (South Africa)</b><br><br>[PLACEHOLDER — paste your South Africa MSA here.] This agreement governs the engagement between Untapped and the client for talent placed in South Africa.<br><br>1. Scope of services. [PLACEHOLDER]<br><br>2. Retainer &amp; fees. [PLACEHOLDER]<br><br>3. Confidentiality. [PLACEHOLDER]<br><br>4. Term &amp; termination. [PLACEHOLDER]<br><br>5. Liability. [PLACEHOLDER]`; }
+  return `<b style="color:#fff">Untapped — Master Services Agreement</b><br><br>[PLACEHOLDER terms.] By typing your name and ticking the box you agree to these terms on behalf of your company.`;
+}
 function obFunnel(step){
   const co=(OB&&OB.company)||'Untapped';
   const perHire=(OB&&OB.retainerPerHire)||1000, hires=(OB&&OB.hires)||1;
-  const ret=(OB&&OB.retainerTotal)||perHire*hires;
+  const base=(OB&&OB.retainerBase)||perHire*hires, vat=!!(OB&&OB.vat), region=(OB&&OB.region)||'';
+  const ret=(OB&&OB.retainerTotal)||(vat?base*1.2:base);
   if(step==='welcome'){
     el.innerHTML=`<div class="center"><div class="card" style="max-width:620px;width:100%">
       <div class="heatrule"></div><div class="lab">Welcome to Untapped</div>
@@ -287,10 +293,9 @@ function obFunnel(step){
   if(step==='terms'){
     el.innerHTML=`<div class="center"><div class="card" style="max-width:620px;width:100%">
       <div class="heatrule"></div>${obStepper('terms')}
-      <h1 style="font-size:24px">Review &amp; sign our terms</h1>
+      <h1 style="font-size:24px">Review &amp; sign our agreement</h1>
       <div style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0;font-size:13px;line-height:1.6;color:var(--muted)">
-        <b style="color:#fff">Untapped — Terms of Engagement [PLACEHOLDER]</b><br><br>
-        1. Scope of services. [PLACEHOLDER text]<br><br>2. Retainer &amp; fees. A retainer of £${ret} is payable to begin. [PLACEHOLDER]<br><br>3. Confidentiality. [PLACEHOLDER]<br><br>4. Term &amp; termination. [PLACEHOLDER]<br><br>5. Liability. [PLACEHOLDER]<br><br>By typing your name and ticking the box you agree to these terms on behalf of your company.
+        ${msaText(region)}<br><br>By typing your name and ticking the box you agree to this agreement on behalf of your company.
       </div>
       <label class="fl">Full name</label><input id="ob_name" placeholder="e.g. Jane Smith">
       <label class="row" style="align-items:center;gap:10px;margin-top:12px;cursor:pointer;font-size:14px"><input type="checkbox" id="ob_agree" style="width:18px;height:18px"> I have read and agree to the terms above.</label>
@@ -304,8 +309,8 @@ function obFunnel(step){
       <div class="heatrule" style="margin:0 auto"></div>${obStepper('pay')}
       <h1 style="font-size:24px">Pay your retainer</h1>
       <p class="muted" style="font-size:14px">Terms signed ✓ — thank you. To begin, please pay your onboarding retainer.</p>
-      <div style="font-family:Iowan Old Style,Georgia,serif;font-size:44px;margin:14px 0">£${ret}</div>
-      ${hires>1?`<p class="muted" style="font-size:13px;margin-top:-8px">£${perHire} × ${hires} hires</p>`:''}
+      <div style="font-family:Iowan Old Style,Georgia,serif;font-size:44px;margin:14px 0">£${Number(ret).toFixed(2).replace(/\.00$/,'')}</div>
+      <p class="muted" style="font-size:13px;margin-top:-8px">${hires>1?`£${perHire} × ${hires} hires`:`£${perHire}`}${vat?` + VAT 20% (£${base} + £${(base*0.2).toFixed(2).replace(/\.00$/,'')})`:''}</p>
       <div class="err" id="ob_err"></div>
       <button class="btn" style="width:100%" onclick="App.obPay()">Pay securely with card →</button>
       <p class="muted" style="font-size:12px;margin-top:8px">Payments processed securely by Stripe.</p>
@@ -371,7 +376,8 @@ function renderOnboardingAdmin(){
   }
   // Admin view — full onboarding configuration.
   const o=WS.onboarding||{required:false,retainerPerHire:1000,hires:1,status:'pending'};
-  const perHire=Number(o.retainerPerHire)||1000, hires=Number(o.hires)||1, total=perHire*hires;
+  const perHire=Number(o.retainerPerHire)||1000, hires=Number(o.hires)||1, baseAmt=perHire*hires;
+  const vat=!!o.vat, total=vat?baseAmt*1.2:baseAmt, region=o.region||'';
   const base=location.origin+location.pathname+'?w='+wsId;
   const chip=(ok,label)=>`<span class="badge ${ok?'':'open'}" style="margin-right:6px">${ok?'✓':'○'} ${label}</span>`;
   const sg=o.signed, pd=o.paid;
@@ -383,7 +389,14 @@ function renderOnboardingAdmin(){
         <div><label class="fl">Retainer per hire (£)</label><input id="ob_ret" type="number" min="0" step="50" value="${perHire}" oninput="App.obTotalPreview()"></div>
         <div><label class="fl">Number of hires</label><input id="ob_hires" type="number" min="1" step="1" value="${hires}" oninput="App.obTotalPreview()"></div>
       </div>
-      <div style="margin-top:12px;font-size:15px">Total retainer charged: <b id="ob_total">£${total.toFixed(0)}</b> <span class="muted">(£${perHire} × ${hires})</span></div>
+      <label class="fl" style="margin-top:12px">Agreement (MSA) region</label>
+      <select id="ob_region" style="width:100%">
+        <option value="" ${!region?'selected':''}>— select —</option>
+        <option value="Philippines" ${region==='Philippines'?'selected':''}>Philippines</option>
+        <option value="South Africa" ${region==='South Africa'?'selected':''}>South Africa</option>
+      </select>
+      <label class="row" style="align-items:center;gap:10px;cursor:pointer;font-size:15px;margin-top:12px"><input type="checkbox" id="ob_vat" ${vat?'checked':''} style="width:18px;height:18px" onchange="App.obTotalPreview()"> Add VAT (20%)</label>
+      <div style="margin-top:12px;font-size:15px">Total retainer charged: <b id="ob_total">£${total.toFixed(2)}</b> <span class="muted" id="ob_break">(£${perHire} × ${hires}${vat?' + VAT':''})</span></div>
       <button class="btn sm" style="margin-top:12px" onclick="App.saveOnboarding()">Save settings</button>
     </div>
     <div class="card" style="margin-top:14px;max-width:640px">
@@ -615,8 +628,8 @@ const App={
   // commissions (customer)
   addComm:async()=>{const amount=$('#cm_a').value;if(!amount||Number(amount)<=0){$('#cm_err').textContent='Enter an amount greater than 0.';return;}const j=await api('addCommission',{candidateId:$('#cm_c').value,amount,type:$('#cm_t').value,note:$('#cm_n').value.trim(),month:$('#cm_m').value});if(j.ok){await refresh();renderCommissions();toast('Added');}else $('#cm_err').textContent=j.error||'Failed';},
   delComm:async(id)=>{const j=await api('deleteCommission',{commissionId:id});if(j.ok){await refresh();renderCommissions();toast('Removed');}},
-  saveOnboarding:async()=>{ const required=$('#ob_req').checked, retainerPerHire=$('#ob_ret').value, hires=$('#ob_hires').value; const j=await api('setOnboardingConfig',{required,retainerPerHire,hires}); if(j.ok){await refresh();renderOnboardingAdmin();toast('Onboarding settings saved');} else toast(j.error||'Failed'); },
-  obTotalPreview:()=>{ const p=Number($('#ob_ret').value)||0, h=Math.max(1,Number($('#ob_hires').value)||1); const t=$('#ob_total'); if(t)t.textContent='£'+(p*h).toFixed(0); },
+  saveOnboarding:async()=>{ const required=$('#ob_req').checked, retainerPerHire=$('#ob_ret').value, hires=$('#ob_hires').value, vat=$('#ob_vat').checked, region=$('#ob_region').value; const j=await api('setOnboardingConfig',{required,retainerPerHire,hires,vat,region}); if(j.ok){await refresh();renderOnboardingAdmin();toast('Onboarding settings saved');} else toast(j.error||'Failed'); },
+  obTotalPreview:()=>{ const p=Number($('#ob_ret').value)||0, h=Math.max(1,Number($('#ob_hires').value)||1), v=$('#ob_vat').checked; const base=p*h, tot=v?base*1.2:base; const t=$('#ob_total'); if(t)t.textContent='£'+tot.toFixed(2); const b=$('#ob_break'); if(b)b.textContent='(£'+p+' × '+h+(v?' + VAT':'')+')'; },
   saveAdminPin:async()=>{ const v=$('#ob_apin').value.trim(), err=$('#ob_apin_err'); if(!/^\d{4}$/.test(v)){err.textContent='PIN must be 4 digits.';return;} const j=await api('setAdminPin',{newAdminPin:v}); if(j.ok){alert('Admin PIN set. From now on, open onboarding settings by unlocking with this admin PIN — the client PIN no longer shows them.');clearSession();location.search='?w='+wsId;} else err.textContent=j.error||'Failed'; },
   resetOnboarding:async()=>{ if(!confirm('Reset this client’s onboarding? They’ll need to sign, pay and complete the questionnaire again.'))return; const j=await api('resetOnboarding'); if(j.ok){await refresh();renderOnboardingAdmin();toast('Onboarding reset');} else toast(j.error||'Failed'); },
   obGo:(s)=>obFunnel(s),
