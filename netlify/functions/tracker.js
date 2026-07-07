@@ -136,6 +136,85 @@ exports.handler = async (event) => {
     return json(200, { ok: true, wsId, candidateId: candId });
   }
 
+  /* =====================  UNTAPPED CENTRAL ADMIN CONSOLE  =====================
+   * Global, key-gated (separate from per-client PINs). Config lives in the
+   * "__config" blob. Lets Untapped create clients, list them, and track MSAs.
+   */
+  const stageOf = (o) => {
+    o = o || {};
+    if (o.ddDone) return 'active';
+    if (o.woDone) return 'directdebit';
+    if (o.hired) return 'workorder';
+    if (o.booked) return 'shortlist';
+    if (o.questionnaireDone) return 'booked';
+    if (o.paid) return 'questionnaire';
+    if (o.signed) return 'paid';
+    return 'sent';
+  };
+  if (action === 'adminStatus') {
+    const cfg = await store.get('__config', { type: 'json' });
+    const authed = !!(cfg && cfg.adminKey && String(b.adminKey || '') === String(cfg.adminKey));
+    return json(200, { ok: true, setup: !!(cfg && cfg.adminKey), authed });
+  }
+  if (action === 'adminBootstrap') {
+    const cfg = (await store.get('__config', { type: 'json' })) || {};
+    if (cfg.adminKey) return json(403, { error: 'admin already set up' });
+    if (!/^\d{4,8}$/.test(String(b.adminKey || ''))) return json(400, { error: 'admin PIN must be 4–8 digits' });
+    cfg.adminKey = String(b.adminKey); await store.setJSON('__config', cfg);
+    return json(200, { ok: true });
+  }
+  const adminAuthed = async () => {
+    const cfg = await store.get('__config', { type: 'json' });
+    return !!(cfg && cfg.adminKey && String(b.adminKey || '') === String(cfg.adminKey));
+  };
+  if (action === 'adminList') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const { blobs } = await store.list();
+    const clients = [];
+    for (const bl of blobs) {
+      if (bl.key === '__config') continue;
+      const w = await store.get(bl.key, { type: 'json' }); if (!w) continue;
+      const o = w.onboarding || {};
+      const per = Number(o.retainerPerHire) || 0, hires = Number(o.hires) || 1;
+      const total = o.vat ? per * hires * 1.2 : per * hires;
+      clients.push({
+        id: w.id, company: w.company || '', customerEmail: w.customerEmail || '',
+        region: o.region || null, retainerTotal: total, required: !!o.required,
+        stage: o.required ? stageOf(o) : 'no-onboarding',
+        signed: o.signed || null, paid: o.paid || null, questionnaireDone: !!o.questionnaireDone,
+        sentAt: o.sentAt || w.createdAt || null, createdAt: w.createdAt || null
+      });
+    }
+    clients.sort((a, b2) => String(b2.sentAt || '').localeCompare(String(a.sentAt || '')));
+    return json(200, { ok: true, clients });
+  }
+  if (action === 'adminCreateClient') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    if (!String(b.company || '').trim()) return json(400, { error: 'company name required' });
+    const region = ['Philippines', 'South Africa'].includes(b.region) ? b.region : null;
+    if (!region) return json(400, { error: 'choose a region' });
+    const wsId = uid(), candId = uid();
+    const gen = () => String(Math.floor(1000 + Math.random() * 9000));
+    let clientPin = gen(), candidatePin = gen(); if (candidatePin === clientPin) candidatePin = gen();
+    const ws = {
+      id: wsId, company: String(b.company).trim(), customerEmail: b.customerEmail || '',
+      customerPin: clientPin, adminPin: null, createdAt: new Date().toISOString(), commissions: [],
+      onboarding: {
+        required: true, retainerPerHire: Math.max(0, Number(b.retainerPerHire) || 1000),
+        hires: Math.max(1, Math.round(Number(b.hires) || 1)), vat: !!b.vat, region,
+        status: 'pending', signed: null, paid: null, questionnaireDone: false,
+        booked: false, hired: false, woDone: false, ddDone: false, sentAt: new Date().toISOString()
+      },
+      candidates: [{
+        id: candId, name: b.candidate || 'First hire', role: '', email: '', location: region, allowance: 20, timeoff: [],
+        candidatePin, createdAt: new Date().toISOString(), kpis: { daily: [], weekly: [], monthly: [] },
+        logs: { daily: {}, weekly: {}, monthly: {} }, pulse: {}, blockers: [], kudos: [], lastActivity: null
+      }]
+    };
+    await store.setJSON(wsId, ws);
+    return json(200, { ok: true, wsId, clientPin, candidatePin });
+  }
+
   const wsId = b.wsId; if (!wsId) return json(400, { error: 'missing wsId' });
   const ws = await store.get(wsId, { type: 'json' });
   if (!ws) return json(404, { error: 'not found' });
