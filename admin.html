@@ -191,10 +191,15 @@ async function openClient(id){
     <div style="margin:12px 0">${step(!!c.signed,'MSA signed')}${step(!!c.paid,'Retainer paid')}${step(!!c.questionnaireDone,'Questionnaire')}${step(!!c.booked,'Kick-off booked')}${step(!!c.hired,'Hired')}${step(!!c.woDone,'Work Order')}${step(!!c.ddDone,'Direct Debit')}</div>
     <div class="month">Access PINs</div>
     <div class="card">
-      <div class="grid2">
-        <div><div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Client PIN</div><div style="font-size:22px;letter-spacing:.2em;margin-top:4px">${esc(c.clientPin||'—')}</div><div class="muted" style="font-size:12px">their dashboard</div></div>
-        <div><div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Candidate PIN</div>${c.candidatePin?`<div style="font-size:22px;letter-spacing:.2em;margin-top:4px">${esc(c.candidatePin)}</div><div class="muted" style="font-size:12px">${esc(c.candidateName||'the hire')} — logs progress</div>`:`<div style="font-size:15px;margin-top:8px;color:var(--muted)">Available once the Work Order is signed</div>`}</div>
-      </div>
+      <div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Client PIN</div>
+      <div style="font-size:22px;letter-spacing:.2em;margin-top:4px">${esc(c.clientPin||'—')}</div>
+      <div class="muted" style="font-size:12px">the client's dashboard login</div>
+      <div style="border-top:1px solid var(--line);margin:14px 0 0;padding-top:12px"></div>
+      <div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Team members${c.team?` (${c.team.length})`:''}</div>
+      ${c.team ? (c.team.length ? `<div style="margin-top:8px">${c.team.map(t=>`<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>${esc(t.name)}</span><span style="font-size:18px;letter-spacing:.2em">${esc(t.candidatePin||'—')}</span></div>`).join('')}</div>
+      <div class="muted" style="font-size:12px;margin-top:8px">The client adds more team members from their dashboard — they'll all appear here with their PINs.</div>`
+        : '<div class="muted" style="font-size:13px;margin-top:8px">No team members yet.</div>')
+        : '<div style="font-size:15px;margin-top:8px;color:var(--muted)">Team PINs are revealed once the Work Order is signed.</div>'}
     </div>
     <div class="month">Agreements &amp; signatures</div>
     <div class="card">
