@@ -189,6 +189,13 @@ async function openClient(id){
     <h1 style="font-size:23px;margin:6px 0 2px">${esc(c.company)}</h1>
     <p class="muted" style="font-size:13px">${esc(c.region||'—')} · retainer £${((c.vat?c.retainerPerHire*c.hires*1.2:c.retainerPerHire*c.hires)||0).toFixed(0)} · <a href="${location.origin+'/?w='+c.id}" target="_blank" style="color:#ffb27a">client link ↗</a></p>
     <div style="margin:12px 0">${step(!!c.signed,'MSA signed')}${step(!!c.paid,'Retainer paid')}${step(!!c.questionnaireDone,'Questionnaire')}${step(!!c.booked,'Kick-off booked')}${step(!!c.hired,'Hired')}${step(!!c.woDone,'Work Order')}${step(!!c.ddDone,'Direct Debit')}</div>
+    <div class="month">Access PINs</div>
+    <div class="card">
+      <div class="grid2">
+        <div><div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Client PIN</div><div style="font-size:22px;letter-spacing:.2em;margin-top:4px">${esc(c.clientPin||'—')}</div><div class="muted" style="font-size:12px">their dashboard</div></div>
+        <div><div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Candidate PIN</div>${c.candidatePin?`<div style="font-size:22px;letter-spacing:.2em;margin-top:4px">${esc(c.candidatePin)}</div><div class="muted" style="font-size:12px">${esc(c.candidateName||'the hire')} — logs progress</div>`:`<div style="font-size:15px;margin-top:8px;color:var(--muted)">Available once the Work Order is signed</div>`}</div>
+      </div>
+    </div>
     <div class="month">Agreements &amp; signatures</div>
     <div class="card">
       <b style="font-size:15px">Master Services Agreement (${esc(c.region||'—')})</b>
