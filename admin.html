@@ -208,7 +208,7 @@ async function openClient(id){
       ${c.signed&&c.signed.company?`<div class="muted" style="font-size:13px;margin-top:4px">${esc(c.signed.company.name||'')} · Reg ${esc(c.signed.company.regNumber||'')}${c.signed.company.address?' · '+esc(c.signed.company.address):''}</div>`:''}
       <div class="muted" style="font-size:13px;margin-top:4px">Untapped: ${c.msaCountersign?`${esc(c.msaCountersign.name)} (${esc(c.msaCountersign.title)}) · ${new Date(c.msaCountersign.ts).toLocaleString('en-GB')}`:'not counter-signed'}</div>
       <div class="row" style="margin-top:10px">
-        <a class="btn ghost sm" href="/${c.region==='Philippines'?'msa-philippines.html':'msa-south-africa.html'}" target="_blank">View MSA</a>
+        <a class="btn ghost sm" href="/${c.region==='Philippines'?'msa-philippines.html':'msa-south-africa.html'}${(c.signed&&c.signed.company)?('?company='+encodeURIComponent(c.signed.company.name||'')+'&reg='+encodeURIComponent(c.signed.company.regNumber||'')+'&addr='+encodeURIComponent(c.signed.company.address||'')):''}" target="_blank">View MSA</a>
         ${c.msaCountersign?'':`<button class="btn sm" onclick="countersignMSA('${c.id}')" ${c.signed?'':'disabled title="client has not signed yet"'}>Counter-sign as Untapped</button>`}
         ${(c.signed&&c.msaCountersign)?`<button class="btn ghost sm" onclick="printRecord('${c.id}','msa')">Print signed record</button>`:''}
       </div>

@@ -184,4 +184,20 @@
 <p>Signature: Signature: _______________________________________ _______________________________________</p>
 <p>Title: Title: ________________________________________ ________________________________________</p>
 <p>Date: Date: ________________________________________ ________________________________________</p>
-</div></body></html>
+</div>
+<script>
+(function(){
+  var p=new URLSearchParams(location.search);
+  var co=(p.get('company')||'').trim(), reg=(p.get('reg')||'').trim(), addr=(p.get('addr')||'').trim();
+  if(!co) return;
+  function esc(s){return String(s).replace(/[&<>]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;'})[c];});}
+  var ps=[].slice.call(document.querySelectorAll('.wrap p'));
+  var cust=null; for(var i=0;i<ps.length;i++){ if(/^Customer\s*:/.test(ps[i].textContent.trim())){cust=ps[i];break;} }
+  if(cust){
+    cust.innerHTML='Customer: <b>'+esc(co)+'</b>, a Ltd company'+(reg?' (registration no. <b>'+esc(reg)+'</b>)':'')+', with its principal offices located at <b>'+esc(addr||'—')+'</b>.';
+    var nx=cust.nextElementSibling; if(nx && /^\[\s*\]\.?$/.test(nx.textContent.trim())) nx.parentNode.removeChild(nx);
+  }
+})();
+</script>
+
+</body></html>
