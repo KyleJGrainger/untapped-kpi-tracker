@@ -31,8 +31,12 @@ async function mail(to, subject, html) {
   if (!RESEND_API_KEY || !FROM_EMAIL || !list.length) return;
   try { await sendEmail(RESEND_API_KEY, { from: FROM_EMAIL, to: list, subject, html }); } catch (e) {}
 }
-async function slack(text) {
-  const url = process.env.SLACK_WEBHOOK_URL;
+// Region-routed Slack: South Africa -> #south-africa-delivery-channel, Philippines -> #philippines-delivery-channel.
+// Set per-region incoming-webhook URLs as env vars SLACK_WEBHOOK_SA / SLACK_WEBHOOK_PH (SLACK_WEBHOOK_URL is a fallback).
+async function slack(text, region) {
+  const url = region === 'Philippines' ? process.env.SLACK_WEBHOOK_PH
+            : region === 'South Africa' ? process.env.SLACK_WEBHOOK_SA
+            : process.env.SLACK_WEBHOOK_URL;
   if (!url) return;
   try { await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) }); } catch (e) {}
 }
@@ -197,7 +201,7 @@ exports.handler = async (event) => {
       await save(r);
       const body = `<p style="font-size:15px;color:#333">${esc(text)}</p><p style="color:#777;font-size:13px">Room: ${esc(r.role)} · ${esc(r.client.name)}. Update Atlas to match.</p>`;
       await mail([...TEAM], `Room · ${r.client.name} — ${text}`, emailWrap('Client activity', body, roomLink(r.id)));
-      await slack(`:busts_in_silhouette: *${r.client.name}* room — ${text}  <${roomLink(r.id)}|open>`);
+      await slack(`:busts_in_silhouette: *${r.client.name}* room — ${text}  <${roomLink(r.id)}|open>`, r.region);
       return json(200, { ok: true, room: pub(r) });
     }
 
@@ -219,8 +223,24 @@ exports.handler = async (event) => {
       await save(r);
       const eb = `<p style="font-size:15px;color:#333"><b>${esc(who)}</b> commented:</p><p style="color:#333">${esc(bodyText)}</p>`;
       await mail([...TEAM], `Room · ${r.client.name} — new comment`, emailWrap('New comment', eb, roomLink(r.id)));
-      await slack(`:speech_balloon: *${r.client.name}* room — ${who}: ${bodyText}  <${roomLink(r.id)}|open>`);
+      await slack(`:speech_balloon: *${r.client.name}* room — ${who}: ${bodyText}  <${roomLink(r.id)}|open>`, r.region);
       return json(200, { ok: true, room: pub(r) });
+    }
+
+    if (action === 'roomCvDownload') {
+      const r = await load(String(b.roomId || ''));
+      if (!r) return json(404, { error: 'room not found' });
+      const c = (r.candidates || []).find(x => x.id === String(b.candidateId || ''));
+      if (!c) return json(404, { error: 'candidate not found' });
+      const who = String(b.viewer || (r.client && r.client.contactName) || 'Client');
+      const text = `${who} downloaded ${c.name}'s CV`;
+      r.activity = r.activity || [];
+      r.activity.unshift({ ts: now(), who, text });
+      r.activity = r.activity.slice(0, 200);
+      await save(r);
+      await mail([...TEAM], `Room · ${r.client.name} — CV downloaded`, emailWrap('CV downloaded', `<p style="font-size:15px;color:#333">${esc(text)}</p><p style="color:#777;font-size:13px">Role: ${esc(r.role)}</p>`, roomLink(r.id)));
+      await slack(`:page_facing_up: *${r.client.name}* room — ${text}  <${roomLink(r.id)}|open>`, r.region);
+      return json(200, { ok: true });
     }
 
     // ---------- admin / agent (Atlas sync) ----------
