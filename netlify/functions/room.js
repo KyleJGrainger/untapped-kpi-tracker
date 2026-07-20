@@ -77,6 +77,34 @@ const SEED = {
   viewers: {}
 };
 
+// ---- Shareable DEMO room with entirely fictional candidates (safe for external demos) ----
+const DEMO_SEED = {
+  id: 'demo-co',
+  atlasProjectId: null,
+  role: 'SA — Delivery Consultant', region: 'South Africa',
+  client: { name: 'Demo Co', contactName: 'Sam Client' },
+  owner: 'Untapped',
+  hub: {
+    jd: 'Delivery Consultant — full-time, SA-based, UK hours. 360 delivery across tech mandates. (Demo job description.)',
+    fees: 'Packaged monthly cost per associate (salary + Untapped service charge + EOR/payroll). £1,000 refundable deposit to start. (Demo figures.)',
+    msaStatus: 'MSA signed & counter-signed. (Demo record.)',
+    process: '1) Review shortlist · 2) Request interview · 3) 2nd interview if needed · 4) Offer. Untapped handles onboarding, HR & payroll.'
+  },
+  calendlyUrl: 'https://calendly.com/try-untapped/intro-to-untapped',
+  stages: CLIENT_STAGES.map(([id, label]) => ({ id, label })),
+  candidates: [
+    { id: 'demo1', atlasPersonId: null, name: 'Thandiwe Nkosi', headline: 'Senior Delivery Consultant at Horizon Talent', location: 'Cape Town, South Africa', linkedin: '', rating: 5, niche: ['Tech', '360', 'Exec Search'], scope: ['360'], mkt: ['UK', 'EMEA'], cost: 2400, hasCV: false, stage: 'presented', decision: null, exp: [['Senior Delivery Consultant', 'Horizon Talent', '2023–present'], ['Recruitment Consultant', 'Peak Search', '2020–2023']], edu: 'BCom — University of Cape Town' },
+    { id: 'demo2', atlasPersonId: null, name: 'Marco Santos', headline: '360 Recruiter at BrightHire', location: 'Manila, Philippines', linkedin: '', rating: 4, niche: ['Tech', 'GTM'], scope: ['360', '180'], mkt: ['UK', 'US'], cost: 1650, hasCV: false, stage: 'presented', decision: null, exp: [['360 Recruiter', 'BrightHire', '2022–present'], ['Resourcer', 'TalentWorks', '2019–2022']], edu: 'BSc Business — University of Santo Tomas' },
+    { id: 'demo3', atlasPersonId: null, name: 'Lerato Dlamini', headline: 'Talent Partner at Summit People', location: 'Johannesburg, South Africa', linkedin: '', rating: 4, niche: ['Generalist', 'GTM'], scope: ['180'], mkt: ['EMEA'], cost: 2050, hasCV: false, stage: 'presented', decision: null, exp: [['Talent Partner', 'Summit People', '2021–present'], ['Account Manager', 'HireHub', '2018–2021']], edu: 'BA — University of Pretoria' },
+    { id: 'demo4', atlasPersonId: null, name: 'Bianca Reyes', headline: 'Delivery Resourcer at NorthStar Recruitment', location: 'Cebu, Philippines', linkedin: '', rating: 4, niche: ['Tech'], scope: ['180'], mkt: ['UK'], cost: 1500, hasCV: false, stage: 'interview', decision: 'Interview requested', exp: [['Delivery Resourcer', 'NorthStar Recruitment', '2022–present'], ['Sourcer', 'Findr', '2020–2022']], edu: 'BSc IT — Cebu Institute of Technology' },
+    { id: 'demo5', atlasPersonId: null, name: 'Sipho Khumalo', headline: 'Senior Delivery Consultant at Apex Talent', location: 'Durban, South Africa', linkedin: '', rating: 5, niche: ['Tech', 'Exec Search'], scope: ['360', 'Exec Search'], mkt: ['UK', 'US', 'EMEA'], cost: 2400, hasCV: false, stage: 'presented', decision: null, exp: [['Senior Delivery Consultant', 'Apex Talent', '2020–present'], ['Recruitment Consultant', 'Vantage', '2017–2020']], edu: 'BCom Honours — University of KwaZulu-Natal' }
+  ],
+  activity: [], chat: [
+    { id: uid(), who: 'Untapped', side: 'Untapped', ts: now(), body: 'Hi Sam — here are 5 shortlisted Delivery Consultants for your review. Sipho and Thandiwe are our top picks.', replies: [] }
+  ],
+  viewers: {}
+};
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
   let b; try { b = JSON.parse(event.body || '{}'); } catch (e) { return json(400, { error: 'bad json' }); }
@@ -92,6 +120,7 @@ exports.handler = async (event) => {
   async function load(id) {
     let r = await store.get(key(id), { type: 'json' });
     if (!r && id === SEED.id) r = JSON.parse(JSON.stringify(SEED)); // pilot fallback
+    if (!r && id === DEMO_SEED.id) { r = JSON.parse(JSON.stringify(DEMO_SEED)); r.candidates.forEach(c => c.hasCV = true); } // demo fallback: CVs available
     return r;
   }
   const save = (r) => store.setJSON(key(r.id), r);
