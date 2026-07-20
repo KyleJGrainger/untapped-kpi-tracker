@@ -259,6 +259,7 @@ function workOrderEditor(c){
     </div>`;
 }
 function roomPanelHTML(c){
+  if(!c.roomId && c.existingClient) return `<div class="row" style="justify-content:space-between;align-items:center"><div class="muted" style="font-size:13px">Existing client — link their Atlas role so their room shows in their dashboard.</div><button class="btn sm" onclick="roomPicker('${c.id}')">Link a room</button></div>`;
   if(c.roomId) return `<div class="row" style="justify-content:space-between;align-items:center"><div><b>Linked room</b><div class="muted" style="font-size:12px">${esc(c.roomId)}</div><div class="muted" style="font-size:12px">Shows in the client's dashboard at the shortlist step.</div></div><div class="row"><a class="btn ghost sm" href="${location.origin+'/room.html?r='+encodeURIComponent(c.roomId)}" target="_blank">Open room ↗</a><button class="btn ghost sm" onclick="roomPicker('${c.id}')">Change</button></div></div>`;
   if(c.booked&&c.kickoffAttended) return `<div style="border:1px solid #FFC600;background:#20130c;border-radius:8px;padding:10px 12px"><div class="row" style="justify-content:space-between;align-items:center"><div><b style="color:#FFC600">✓ Kick-off attended</b><div class="muted" style="font-size:12px">Link this client to their Atlas role so their room appears in their dashboard.</div></div><button class="btn sm" onclick="roomPicker('${c.id}')">Link their room</button></div></div>`;
   if(c.booked) return `<div class="row" style="justify-content:space-between;align-items:center"><div class="muted" style="font-size:13px">Kick-off booked. Mark it attended to prompt linking their room.</div><button class="btn sm" onclick="markAttended('${c.id}')">Mark kick-off attended</button></div>`;
@@ -378,32 +379,71 @@ function roomUploadCV(id,cid,input){const f=input.files&&input.files[0];if(!f)re
 function roomUploadPhoto(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>2*1024*1024){toast('Max 2MB');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading photo…');const j=await roomApi('roomUploadPhoto',{roomId:id,candidateId:cid,photo:String(r.result)});toast(j.ok?'Photo uploaded':(j.error||'Upload failed'));if(j.ok)openRoom(id);};r.readAsDataURL(f);}
 function uploadCV(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>6*1024*1024){toast('File too big (max 6MB)');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading…');const j=await api('adminUploadCV',{wsId:id,candidateId:cid,dataBase64:String(r.result)});if(j.ok){toast('CV uploaded');openClient(id);}else toast(j.error||'Upload failed');};r.readAsDataURL(f);}
 
+let cmode='new';
 function newClientForm(){
+  cmode='new';
   $('#body').innerHTML=`<div class="card" style="max-width:560px">
-    <h1 style="font-size:22px;margin:0 0 4px">Set up a new client</h1>
-    <p class="muted" style="font-size:13px">This creates their onboarding link, picks the right MSA + kick-off call by region, and sets the retainer. Send them the link at the end.</p>
+    <h1 style="font-size:22px;margin:0 0 8px">Add a client</h1>
+    <div class="tabs" style="margin:0 0 14px"><button class="tab on" id="cm_new" onclick="setCMode('new')">New client</button><button class="tab" id="cm_ex" onclick="setCMode('existing')">Existing client</button></div>
+    <p class="muted" id="cm_desc" style="font-size:13px">Creates their onboarding link (sign terms → pay → questionnaire → kick-off) and sets the retainer.</p>
     <label class="fl">Client company name</label><input id="c_co" placeholder="e.g. Acme Ltd">
     <label class="fl">Client email</label><input id="c_em" type="email" placeholder="ops@acme.com">
-    <label class="fl">Region (sets the MSA &amp; kick-off call)</label>
+    <label class="fl" id="c_rg_l">Region (sets the MSA &amp; kick-off call)</label>
     <select id="c_rg"><option value="">— choose —</option><option value="Philippines">Philippines</option><option value="South Africa">South Africa</option></select>
-    <div class="grid2">
-      <div><label class="fl">Retainer per hire (£)</label><input id="c_ret" type="number" min="0" step="50" value="1000" oninput="prev()"></div>
-      <div><label class="fl">Number of hires</label><input id="c_h" type="number" min="1" step="1" value="1" oninput="prev()"></div>
+    <div id="cm_newfields">
+      <div class="grid2">
+        <div><label class="fl">Retainer per hire (£)</label><input id="c_ret" type="number" min="0" step="50" value="1000" oninput="prev()"></div>
+        <div><label class="fl">Number of hires</label><input id="c_h" type="number" min="1" step="1" value="1" oninput="prev()"></div>
+      </div>
+      <label class="row" style="align-items:center;gap:10px;margin-top:12px;cursor:pointer;font-size:15px"><input type="checkbox" id="c_vat" style="width:18px;height:18px" onchange="prev()"> Add VAT (20%)</label>
+      <div style="margin-top:12px;font-size:15px">Retainer charged: <b id="c_tot">£1000</b></div>
     </div>
-    <label class="row" style="align-items:center;gap:10px;margin-top:12px;cursor:pointer;font-size:15px"><input type="checkbox" id="c_vat" style="width:18px;height:18px" onchange="prev()"> Add VAT (20%)</label>
-    <div style="margin-top:12px;font-size:15px">Retainer charged: <b id="c_tot">£1000</b></div>
+    <div id="cm_exfields" style="display:none">
+      <label class="fl">Team members already hired</label>
+      <textarea id="c_team" style="width:100%;height:110px;background:#0d0f14;color:#cdd6df;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;font-family:inherit" placeholder="One per line — Name, email (email optional)&#10;Jane Smith, jane@acme.com&#10;John Doe"></textarea>
+      <p class="muted" style="font-size:12px;margin-top:6px">Instant dashboard access — no terms, payment or kick-off. Each team member gets their own PIN. You can add more later from their dashboard.</p>
+    </div>
     <div class="err" id="c_err"></div>
-    <button class="btn" style="margin-top:6px" onclick="createClient()">Create client &amp; link →</button>
+    <button class="btn" style="margin-top:8px" onclick="createClient()">Create client →</button>
   </div>`;
+}
+function setCMode(m){cmode=m;
+  $('#cm_new').classList.toggle('on',m==='new');$('#cm_ex').classList.toggle('on',m==='existing');
+  $('#cm_newfields').style.display=m==='new'?'block':'none';
+  $('#cm_exfields').style.display=m==='existing'?'block':'none';
+  $('#c_rg_l').textContent=m==='existing'?'Region (optional — for holidays &amp; location)':'Region (sets the MSA & kick-off call)';
+  $('#cm_desc').textContent=m==='new'?'Creates their onboarding link (sign terms → pay → questionnaire → kick-off) and sets the retainer.':'For clients already onboarded with terms & hires — instant dashboard access, bypassing the funnel.';
 }
 function prev(){const p=Number($('#c_ret').value)||0,h=Math.max(1,Number($('#c_h').value)||1),v=$('#c_vat').checked;$('#c_tot').textContent='£'+((v?p*h*1.2:p*h)).toFixed(0);}
 async function createClient(){
-  const company=$('#c_co').value.trim(),customerEmail=$('#c_em').value.trim(),region=$('#c_rg').value,retainerPerHire=$('#c_ret').value,hires=$('#c_h').value,vat=$('#c_vat').checked,err=$('#c_err');
+  const company=$('#c_co').value.trim(),customerEmail=$('#c_em').value.trim(),region=$('#c_rg').value,err=$('#c_err');
   if(!company){err.textContent='Enter the client company name.';return;}
-  if(!region){err.textContent='Choose a region.';return;}
-  const j=await api('adminCreateClient',{company,customerEmail,region,retainerPerHire,hires,vat});
+  let payload={company,customerEmail,region};
+  if(cmode==='existing'){
+    const lines=($('#c_team').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+    payload.existing=true;
+    payload.teamMembers=lines.map(l=>{const p=l.split(',');return {name:(p[0]||'').trim(),email:(p[1]||'').trim()};}).filter(m=>m.name);
+  } else {
+    if(!region){err.textContent='Choose a region.';return;}
+    payload.retainerPerHire=$('#c_ret').value;payload.hires=$('#c_h').value;payload.vat=$('#c_vat').checked;
+  }
+  const j=await api('adminCreateClient',payload);
   if(!j.ok){err.textContent=j.error||'Failed';return;}
   const link=location.origin+'/?w='+j.wsId;
+  if(j.existing){
+    $('#body').innerHTML=`<div class="card" style="max-width:560px">
+      <h1 style="font-size:22px;margin:0 0 6px">${esc(company)} is set up ✓</h1>
+      <p class="muted" style="font-size:14px"><b style="color:#7ee2a0">Instant dashboard access</b> — no terms, payment or kick-off. Send them their link and PIN below.</p>
+      <div class="share"><b>Dashboard link:</b><br>${esc(link)}</div>
+      <div class="share" style="margin-top:12px"><b>Client PIN</b><br>${esc(j.clientPin)} <span class="muted">— opens their dashboard now</span></div>
+      ${(j.team&&j.team.length)?`<div style="margin-top:12px"><div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Team member PINs</div>${j.team.map(t=>`<div class="share" style="margin-top:6px"><b>${esc(t.name)}</b> — ${esc(t.candidatePin)}</div>`).join('')}</div>`:'<p class="muted" style="font-size:13px;margin-top:10px">No team members added — the client can add them from their dashboard.</p>'}
+      <div class="row" style="margin-top:16px">
+        <button class="btn" onclick="copy('${link}')">Copy link</button>
+        <button class="btn ghost" onclick="go('clients')">Back to clients</button>
+      </div>
+    </div>`;
+    return;
+  }
   $('#body').innerHTML=`<div class="card" style="max-width:560px">
     <h1 style="font-size:22px;margin:0 0 6px">${esc(company)} is set up ✓</h1>
     <p class="muted" style="font-size:14px">Send this link to the client — it opens their branded onboarding (sign the ${esc(region)} MSA → pay → questionnaire → book kick-off call).</p>
