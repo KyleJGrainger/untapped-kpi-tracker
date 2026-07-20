@@ -96,8 +96,8 @@ exports.handler = async (event) => {
   }
   const save = (r) => store.setJSON(key(r.id), r);
   const roomLink = (id) => `${reqBase.replace(/\/$/, '')}/room.html?r=${id}`;
-  // client never sees internal-only fields (nothing sensitive today, but keep a seam)
-  const pub = (r) => r;
+  // client-facing view: strip the viewer/engagement log (internal only)
+  const pub = (r) => { const { viewers, ...rest } = r; return rest; };
 
   const { action } = b;
   const isAdmin = () => store.get('__config', { type: 'json' }).then(c => !!(c && c.adminKey && String(b.adminKey || '') === String(c.adminKey)));
@@ -222,6 +222,47 @@ exports.handler = async (event) => {
         if (r) out.push({ id: r.id, role: r.role, client: r.client && r.client.name, candidates: (r.candidates || []).length, syncedAt: r.syncedAt || null, viewers: Object.keys(r.viewers || {}).length });
       }
       return json(200, { ok: true, rooms: out });
+    }
+
+    if (action === 'roomAnalytics') {
+      if (!(await isAdmin())) return json(403, { error: 'admin only' });
+      const r = await load(String(b.roomId || ''));
+      if (!r) return json(404, { error: 'room not found' });
+      const nameById = {}; (r.candidates || []).forEach(c => nameById[c.id] = c.name);
+      const viewers = Object.values(r.viewers || {}).map(v => ({
+        name: v.name, email: v.email, firstSeen: v.firstSeen, lastSeen: v.lastSeen,
+        opened: Object.entries(v.views || {}).map(([cid, s]) => ({ candidate: nameById[cid] || cid, count: s.count, seconds: s.seconds, last: s.last })).sort((a, b2) => b2.seconds - a.seconds)
+      })).sort((a, b2) => new Date(b2.lastSeen || 0) - new Date(a.lastSeen || 0));
+      return json(200, { ok: true, role: r.role, client: r.client, viewers, activity: (r.activity || []).slice(0, 40) });
+    }
+
+    if (action === 'roomUploadCV') {
+      if (!(await isAdmin())) return json(403, { error: 'admin only' });
+      const r = await load(String(b.roomId || ''));
+      if (!r) return json(404, { error: 'room not found' });
+      const c = (r.candidates || []).find(x => x.id === String(b.candidateId || ''));
+      if (!c) return json(404, { error: 'candidate not found' });
+      const data = String(b.dataBase64 || '');
+      if (!data) return json(400, { error: 'no file' });
+      if (data.length > 8 * 1024 * 1024) return json(400, { error: 'file too large' });
+      await store.set('cv:' + r.id + ':' + c.id, data); // cv.js serves this (strips data: prefix)
+      c.hasCV = true;
+      await save(r);
+      return json(200, { ok: true });
+    }
+
+    if (action === 'roomUploadPhoto') {
+      if (!(await isAdmin())) return json(403, { error: 'admin only' });
+      const r = await load(String(b.roomId || ''));
+      if (!r) return json(404, { error: 'room not found' });
+      const c = (r.candidates || []).find(x => x.id === String(b.candidateId || ''));
+      if (!c) return json(404, { error: 'candidate not found' });
+      const photo = String(b.photo || '');
+      if (!/^data:image\//.test(photo)) return json(400, { error: 'photo must be a data: image' });
+      if (photo.length > 2.5 * 1024 * 1024) return json(400, { error: 'image too large (max ~2MB)' });
+      c.photo = photo;
+      await save(r);
+      return json(200, { ok: true });
     }
 
     return json(400, { error: 'unknown action' });
