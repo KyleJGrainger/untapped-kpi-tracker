@@ -12,6 +12,7 @@
  * NOTE: read-only vs Atlas — client actions here notify the team + persist in the room;
  * the matching Atlas move is made by the team until write-API access exists.
  */
+// build: slack-env-rebuild
 const json = (s, o) => ({ statusCode: s, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) });
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const uid = () => (Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
