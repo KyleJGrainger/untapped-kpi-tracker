@@ -236,7 +236,7 @@ exports.handler = async (event) => {
   // ---- Admin: manage a specific client's candidate shortlist ----
   if (action === 'adminGetClient' || action === 'adminAddCandidate' || action === 'adminUpdateCandidate'
       || action === 'adminRemoveCandidate' || action === 'adminUploadCV' || action === 'adminSetHired' || action === 'adminSaveWorkOrder'
-      || action === 'adminCountersignMSA' || action === 'adminCountersignWO' || action === 'adminLinkRoom') {
+      || action === 'adminCountersignMSA' || action === 'adminCountersignWO' || action === 'adminLinkRoom' || action === 'adminMarkKickoffAttended') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'client not found' });
     w.onboarding = w.onboarding || {}; if (!Array.isArray(w.onboarding.shortlist)) w.onboarding.shortlist = [];
@@ -252,7 +252,7 @@ exports.handler = async (event) => {
         teamCount: (w.candidates || []).length,
         retainerPerHire: o.retainerPerHire, hires: o.hires, vat: !!o.vat,
         signed: o.signed || null, paid: o.paid || null, questionnaireDone: !!o.questionnaireDone,
-        booked: o.booked || null, hired: o.hired || null, woDone: o.woDone || null, ddDone: o.ddDone || null,
+        booked: o.booked || null, kickoffAttended: o.kickoffAttended || null, hired: o.hired || null, woDone: o.woDone || null, ddDone: o.ddDone || null,
         msaCountersign: o.msaCountersign || null, workOrder: o.workOrder || null,
         shortlist: (o.shortlist || []).map(c => { const k = costOf(c.salary, region); return {
           id: c.id, name: c.name, commentary: c.commentary || '', salary: Number(c.salary) || 0, hasCV: !!c.hasCV,
@@ -262,6 +262,10 @@ exports.handler = async (event) => {
     if (action === 'adminLinkRoom') {
       w.roomId = b.roomId ? String(b.roomId) : null;
       await saveW(); return json(200, { ok: true, roomId: w.roomId });
+    }
+    if (action === 'adminMarkKickoffAttended') {
+      w.onboarding.kickoffAttended = { ts: new Date().toISOString() };
+      await saveW(); return json(200, { ok: true });
     }
     if (action === 'adminSetHired') {
       const c = w.onboarding.shortlist.find(x => x.id === b.candidateId); if (!c) return json(404, { error: 'candidate not found' });
