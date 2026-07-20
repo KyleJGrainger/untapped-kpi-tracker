@@ -190,9 +190,7 @@ async function openClient(id){
     <p class="muted" style="font-size:13px">${esc(c.region||'—')} · retainer £${((c.vat?c.retainerPerHire*c.hires*1.2:c.retainerPerHire*c.hires)||0).toFixed(0)} · <a href="${location.origin+'/?w='+c.id}" target="_blank" style="color:#ffb27a">client link ↗</a></p>
     <div style="margin:12px 0">${step(!!c.signed,'MSA signed')}${step(!!c.paid,'Retainer paid')}${step(!!c.questionnaireDone,'Questionnaire')}${step(!!c.booked,'Kick-off booked')}${step(!!c.hired,'Hired')}${step(!!c.woDone,'Work Order')}${step(!!c.ddDone,'Direct Debit')}</div>
     <div class="month">Collaboration room</div>
-    <div class="card" id="roomlinkcard">${c.roomId
-      ? `<div class="row" style="justify-content:space-between;align-items:center"><div><b>Linked room</b><div class="muted" style="font-size:12px">${esc(c.roomId)}</div><div class="muted" style="font-size:12px">Shows in the client's dashboard at the shortlist step.</div></div><div class="row"><a class="btn ghost sm" href="${location.origin+'/room.html?r='+encodeURIComponent(c.roomId)}" target="_blank">Open room ↗</a><button class="btn ghost sm" onclick="roomPicker('${c.id}')">Change</button></div></div>`
-      : `<div class="row" style="justify-content:space-between;align-items:center"><div class="muted" style="font-size:13px">No room linked. Link this client to their Atlas role so their room appears in their dashboard.</div><button class="btn sm" onclick="roomPicker('${c.id}')">Link a room</button></div>`}</div>
+    <div class="card" id="roomlinkcard">${roomPanelHTML(c)}</div>
     <div class="month">Access PINs</div>
     <div class="card">
       <div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Client PIN</div>
@@ -260,6 +258,13 @@ function workOrderEditor(c){
         :'<div class="muted" style="font-size:12px;margin-top:8px">Awaiting the client to add their details &amp; sign in their funnel.</div>'}
     </div>`;
 }
+function roomPanelHTML(c){
+  if(c.roomId) return `<div class="row" style="justify-content:space-between;align-items:center"><div><b>Linked room</b><div class="muted" style="font-size:12px">${esc(c.roomId)}</div><div class="muted" style="font-size:12px">Shows in the client's dashboard at the shortlist step.</div></div><div class="row"><a class="btn ghost sm" href="${location.origin+'/room.html?r='+encodeURIComponent(c.roomId)}" target="_blank">Open room ↗</a><button class="btn ghost sm" onclick="roomPicker('${c.id}')">Change</button></div></div>`;
+  if(c.booked&&c.kickoffAttended) return `<div style="border:1px solid #FFC600;background:#20130c;border-radius:8px;padding:10px 12px"><div class="row" style="justify-content:space-between;align-items:center"><div><b style="color:#FFC600">✓ Kick-off attended</b><div class="muted" style="font-size:12px">Link this client to their Atlas role so their room appears in their dashboard.</div></div><button class="btn sm" onclick="roomPicker('${c.id}')">Link their room</button></div></div>`;
+  if(c.booked) return `<div class="row" style="justify-content:space-between;align-items:center"><div class="muted" style="font-size:13px">Kick-off booked. Mark it attended to prompt linking their room.</div><button class="btn sm" onclick="markAttended('${c.id}')">Mark kick-off attended</button></div>`;
+  return `<div class="row" style="justify-content:space-between;align-items:center"><div class="muted" style="font-size:13px">No room linked yet. You can link one once they've booked their kick-off.</div><button class="btn ghost sm" onclick="roomPicker('${c.id}')">Link a room</button></div>`;
+}
+async function markAttended(id){const j=await api('adminMarkKickoffAttended',{wsId:id});if(!j.ok){toast(j.error||'Failed');return;}toast('Kick-off marked attended');await openClient(id);roomPicker(id);}
 async function roomPicker(id){
   const card=$('#roomlinkcard');card.innerHTML='<div class="muted" style="font-size:13px">Loading rooms…</div>';
   const j=await roomApi('roomList');
