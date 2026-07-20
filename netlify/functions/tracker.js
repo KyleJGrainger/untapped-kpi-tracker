@@ -204,12 +204,6 @@ exports.handler = async (event) => {
     cfg.adminKey = String(b.adminKey); await store.setJSON('__config', cfg);
     return json(200, { ok: true });
   }
-  // TEMPORARY: clears the admin PIN so the owner can set a fresh one. Remove after use.
-  if (action === 'adminResetKey') {
-    const cfg = (await store.get('__config', { type: 'json' })) || {};
-    delete cfg.adminKey; await store.setJSON('__config', cfg);
-    return json(200, { ok: true });
-  }
   const adminAuthed = async () => {
     const cfg = await store.get('__config', { type: 'json' });
     return !!(cfg && cfg.adminKey && String(b.adminKey || '') === String(cfg.adminKey));
