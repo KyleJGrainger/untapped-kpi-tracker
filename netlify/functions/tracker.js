@@ -236,7 +236,7 @@ exports.handler = async (event) => {
   // ---- Admin: manage a specific client's candidate shortlist ----
   if (action === 'adminGetClient' || action === 'adminAddCandidate' || action === 'adminUpdateCandidate'
       || action === 'adminRemoveCandidate' || action === 'adminUploadCV' || action === 'adminSetHired' || action === 'adminSaveWorkOrder'
-      || action === 'adminCountersignMSA' || action === 'adminCountersignWO') {
+      || action === 'adminCountersignMSA' || action === 'adminCountersignWO' || action === 'adminLinkRoom') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'client not found' });
     w.onboarding = w.onboarding || {}; if (!Array.isArray(w.onboarding.shortlist)) w.onboarding.shortlist = [];
@@ -246,7 +246,7 @@ exports.handler = async (event) => {
       const o = w.onboarding;
       return json(200, { ok: true, client: {
         id: w.id, company: w.company, region, customerEmail: w.customerEmail || '',
-        clientPin: w.customerPin || '',
+        clientPin: w.customerPin || '', roomId: w.roomId || null,
         // full team-member list with PINs — revealed only once the Work Order is signed
         team: o.woDone ? (w.candidates || []).map(c => ({ id: c.id, name: c.name || 'Team member', candidatePin: c.candidatePin || '' })) : null,
         teamCount: (w.candidates || []).length,
@@ -258,6 +258,10 @@ exports.handler = async (event) => {
           id: c.id, name: c.name, commentary: c.commentary || '', salary: Number(c.salary) || 0, hasCV: !!c.hasCV,
           pct: k.pct, fee: k.fee, feeLabel: k.feeLabel, totalCost: k.total, requests: c.requests || [] }; })
       }});
+    }
+    if (action === 'adminLinkRoom') {
+      w.roomId = b.roomId ? String(b.roomId) : null;
+      await saveW(); return json(200, { ok: true, roomId: w.roomId });
     }
     if (action === 'adminSetHired') {
       const c = w.onboarding.shortlist.find(x => x.id === b.candidateId); if (!c) return json(404, { error: 'candidate not found' });
@@ -347,6 +351,7 @@ exports.handler = async (event) => {
     hires: Number(ws.onboarding.hires) || 1, retainerBase: obBase(), vat: !!ws.onboarding.vat, retainerTotal: obTotal(),
     region: ws.onboarding.region || null, kickoffUrl: KICKOFF[ws.onboarding.region] || '',
     status: ws.onboarding.status || 'pending', company: ws.company || '',
+    roomId: ws.roomId || null,
     signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone,
     booked: !!ws.onboarding.booked, hired: !!ws.onboarding.hired, woDone: !!ws.onboarding.woDone, ddDone: !!ws.onboarding.ddDone,
     hiredName: (ws.onboarding.hired || {}).name || '',
