@@ -194,12 +194,68 @@ function route(){
 
 /* ---------- landing / create ---------- */
 function landing(){
-  el.innerHTML=`<div class="center"><div class="card" style="max-width:460px;width:100%">
-    <div class="heatrule"></div><div class="lab">Untapped</div>
-    <h1 style="font-size:28px">Welcome to Untapped</h1>
-    <p class="muted" style="font-size:14px">This is your private link to sign, onboard and manage your Untapped hire. If you've been sent a personal link, please open that — it takes you straight to your account.</p>
-    <p class="muted" style="font-size:13px;margin-top:14px">Untapped team? <a href="/admin.html" style="color:var(--org,#FF6900)">Open the admin console →</a></p>
-  </div></div>`;
+  const CAL='https://calendly.com/try-untapped/intro-to-untapped';
+  const S=(t)=>`<div style="max-width:920px;margin:0 auto;padding:0 22px"><div class="lab" style="text-align:center">${t}</div><div style="width:34px;height:3px;background:#FF6900;margin:6px auto 22px"></div>`;
+  el.innerHTML=`<div style="padding-bottom:70px">
+    <!-- HERO -->
+    <div style="max-width:820px;margin:0 auto;padding:64px 22px 30px;text-align:center">
+      <div class="heatrule" style="max-width:110px;margin:0 auto 20px"></div>
+      <div class="lab">The future of hiring</div>
+      <h1 style="font-family:Iowan Old Style,Georgia,serif;font-size:44px;line-height:1.1;margin:10px 0 14px">Elite global talent —<br><span style="color:#FFC600">teammates, not outsourcers</span></h1>
+      <p class="muted" style="font-size:17px;line-height:1.6;max-width:620px;margin:0 auto">Hire rigorously-vetted recruiters, marketers and operators from South Africa &amp; the Philippines — aligned to your hours and culture, for up to 70% less than UK equivalents.</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:26px">
+        <button class="btn" style="padding:13px 26px;font-size:15px" onclick="App.selfServeStart()">Start hiring →</button>
+        <a class="btn" href="${CAL}" target="_blank" style="padding:13px 26px;font-size:15px;background:transparent;border:1px solid var(--line,#2b333d);color:#cdd6df;text-decoration:none">Book a discovery call</a>
+      </div>
+    </div>
+
+    <!-- PROOF -->
+    <div style="max-width:920px;margin:24px auto 0;padding:0 22px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
+      ${[['150+','companies trust us'],['&lt;1%','resignation rate'],['C1','English, minimum'],['30–70%','cost saving']].map(x=>`<div class="card" style="padding:16px 10px"><div style="font-family:Iowan Old Style,Georgia,serif;font-size:26px;color:#FFC600">${x[0]}</div><div class="muted" style="font-size:12px;margin-top:2px">${x[1]}</div></div>`).join('')}
+    </div>
+
+    <!-- HOW IT WORKS -->
+    <div style="margin-top:56px">${S('How it works')}
+      <div style="max-width:920px;margin:0 auto;padding:0 22px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+        ${[['1','Sign your terms','Review and e-sign your regional MSA in minutes — your company details flow straight in.'],['2','Pay a refundable deposit','A £1,000 deposit kicks off your hiring project — fully refundable if we fail to deliver.'],['3','Meet your shortlist','We source, vet and present a shortlist in your own branded room. Interview and hire.']].map(s=>`<div class="card" style="padding:18px"><div style="font-family:Iowan Old Style,Georgia,serif;font-size:22px;color:#FFC600">${s[0]}</div><b style="display:block;margin:6px 0 4px;font-size:15px">${s[1]}</b><span class="muted" style="font-size:13px;line-height:1.55">${s[2]}</span></div>`).join('')}
+      </div>
+    </div>
+
+    <!-- TESTIMONIAL -->
+    <div style="max-width:720px;margin:52px auto 0;padding:0 22px;text-align:center">
+      <div class="card" style="padding:26px">
+        <p style="font-family:Iowan Old Style,Georgia,serif;font-size:18px;line-height:1.6;margin:0">“Untapped hooked us up with awesome offshore recruiters who've been perfect for us — they took the time to get what we needed and delivered. We couldn't speak highly enough about them.”</p>
+        <p class="muted" style="font-size:13px;margin-top:12px">Martyn Aitken · Director, AJ Connect</p>
+      </div>
+    </div>
+
+    <!-- START FORM -->
+    <div id="ss_form" style="display:none;max-width:520px;margin:52px auto 0;padding:0 22px">
+      <div class="card" style="padding:24px">
+        <div class="heatrule" style="max-width:90px"></div>
+        <div class="lab" style="margin-top:12px">Get started</div>
+        <h2 style="font-family:Iowan Old Style,Georgia,serif;font-size:24px;margin:4px 0 4px">Start your hiring project</h2>
+        <p class="muted" style="font-size:13px;margin:0 0 14px">A few details and you'll go straight to signing your terms and paying your deposit.</p>
+        <label class="fl">Company name</label><input id="ss_company" placeholder="Your company Ltd" style="width:100%">
+        <div style="height:10px"></div>
+        <label class="fl">Your name</label><input id="ss_contact" placeholder="Full name" style="width:100%">
+        <div style="height:10px"></div>
+        <label class="fl">Work email</label><input id="ss_email" type="email" placeholder="name@company.com" style="width:100%">
+        <div style="height:10px"></div>
+        <label class="fl">Where would you like to hire from?</label>
+        <select id="ss_region" style="width:100%"><option value="">Choose a region…</option><option value="South Africa">South Africa</option><option value="Philippines">Philippines</option></select>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px">
+          <input type="checkbox" id="ss_vat" onchange="App.selfServeVat()" style="width:auto"><label for="ss_vat" class="muted" style="font-size:13px">Add VAT (20%)</label>
+          <span style="margin-left:auto" class="muted" style="font-size:13px">Deposit: <b id="ss_amount" style="color:#FFC600">£1,000</b></span>
+        </div>
+        <div class="err" id="ss_err" style="margin-top:8px"></div>
+        <button class="btn" id="ss_btn" style="width:100%;margin-top:12px" onclick="App.selfServeSubmit()">Continue to sign terms →</button>
+        <p class="muted" style="font-size:12px;text-align:center;margin-top:8px">Deposit fully refundable if we fail to deliver.</p>
+      </div>
+    </div>
+
+    <p class="muted" style="font-size:12px;text-align:center;margin-top:44px">Already a client with a personal link? Open that link to reach your account. · Untapped team? <a href="/admin.html" style="color:#FF6900">Admin console →</a></p>
+  </div>`;
 }
 function createForm(){
   el.innerHTML=`<div class="center"><div class="card" style="max-width:480px;width:100%">
@@ -306,8 +362,8 @@ function obFunnel(step){
   if(step==='pay'){
     el.innerHTML=`<div class="center"><div class="card" style="max-width:520px;width:100%;text-align:center">
       <div class="heatrule" style="margin:0 auto"></div>${obStepper('pay')}
-      <h1 style="font-size:24px">Pay your retainer</h1>
-      <p class="muted" style="font-size:14px">Terms signed ✓ — thank you. To begin, please pay your onboarding retainer.</p>
+      <h1 style="font-size:24px">Pay your ${OB.selfServe?'deposit':'retainer'}</h1>
+      <p class="muted" style="font-size:14px">Terms signed ✓ — thank you. ${OB.selfServe?'Pay your fully-refundable deposit to kick off your hiring project — refundable if we fail to deliver.':'To begin, please pay your onboarding retainer.'}</p>
       <div style="font-family:Iowan Old Style,Georgia,serif;font-size:44px;margin:14px 0">£${Number(ret).toFixed(2).replace(/\.00$/,'')}</div>
       <p class="muted" style="font-size:13px;margin-top:-8px">${hires>1?`£${perHire} × ${hires} hires`:`£${perHire}`}${vat?` + VAT 20% (£${base} + £${(base*0.2).toFixed(2).replace(/\.00$/,'')})`:''}</p>
       <div class="err" id="ob_err"></div>
@@ -739,6 +795,9 @@ const App={
   reqCheckin:async()=>{ const note=prompt('Request a check-in with your delivery lead. Anything you’d like to cover? (optional)'); if(note===null)return; const j=await api('requestCheckin',{note}); toast(j.ok?'Check-in requested — your delivery lead will be in touch':(j.error||'Failed')); },
   obSubmitWO:async()=>{ const err=$('#wo_err'); const client={companyName:$('#wo_cn').value.trim(),companyRegNumber:$('#wo_rn').value.trim(),companyAddress:$('#wo_ad').value.trim(),contactName:$('#wo_ct').value.trim(),hiringManagerEmail:$('#wo_hm').value.trim(),accountsEmail:$('#wo_ac').value.trim()}; const name=$('#wo_sig').value.trim(); if(!client.companyName||!client.companyRegNumber){err.textContent='Please add your company name and registration number.';return;} if(!client.hiringManagerEmail||!client.accountsEmail){err.textContent='Please add both email addresses.';return;} if(name.length<2){err.textContent='Type your full name to sign.';return;} if(!$('#wo_agree').checked){err.textContent='Please tick to confirm.';return;} err.textContent=''; const j=await api('submitWorkOrder',{client,name}); if(j.ok){OB=j.onboarding;obFunnel(obStepFor(OB));toast('Work Order signed');} else err.textContent=j.error||'Failed'; },
   obDD:async()=>{ const j=await api('markDD'); if(j.ok){OB=j.onboarding;obFunnel('done');} else toast(j.error||'Failed'); },
+  selfServeStart:()=>{ const f=document.getElementById('ss_form'); if(f){ f.style.display='block'; f.scrollIntoView({behavior:'smooth',block:'center'}); const c=document.getElementById('ss_company'); if(c)c.focus(); } },
+  selfServeVat:()=>{ const v=document.getElementById('ss_vat').checked; const t=document.getElementById('ss_amount'); if(t)t.textContent = v?'£1,200':'£1,000'; },
+  selfServeSubmit:async()=>{ const company=$('#ss_company').value.trim(), contact=$('#ss_contact').value.trim(), email=$('#ss_email').value.trim(), region=$('#ss_region').value, vat=$('#ss_vat').checked, err=$('#ss_err'), btn=$('#ss_btn'); if(company.length<2){err.textContent='Enter your company name.';return;} if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){err.textContent='Enter a valid email.';return;} if(!region){err.textContent='Please choose a region.';return;} err.textContent=''; btn.disabled=true; btn.textContent='Setting up…'; const j=await api('startSelfServe',{company,contact,email,region,vat}); if(j.ok&&j.wsId){ location.href='/?w='+j.wsId; } else { err.textContent=j.error||'Something went wrong — please try again.'; btn.disabled=false; btn.textContent='Continue to sign terms →'; } },
 };
 /* live auto-refresh for the customer dashboard (every 30s, paused when tab hidden or editing) */
 async function autoTick(){
