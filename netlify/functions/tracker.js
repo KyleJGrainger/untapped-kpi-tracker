@@ -220,8 +220,8 @@ exports.handler = async (event) => {
       const total = o.vat ? per * hires * 1.2 : per * hires;
       clients.push({
         id: w.id, company: w.company || '', customerEmail: w.customerEmail || '',
-        region: o.region || null, retainerTotal: total, required: !!o.required,
-        stage: o.required ? stageOf(o) : 'no-onboarding',
+        region: o.region || null, retainerTotal: total, required: !!o.required, existingClient: !!o.existingClient,
+        stage: o.required ? stageOf(o) : (o.existingClient ? 'active' : 'no-onboarding'),
         signed: o.signed || null, paid: o.paid || null, questionnaireDone: !!o.questionnaireDone,
         sentAt: o.sentAt || w.createdAt || null, createdAt: w.createdAt || null
       });
@@ -232,28 +232,40 @@ exports.handler = async (event) => {
   if (action === 'adminCreateClient') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     if (!String(b.company || '').trim()) return json(400, { error: 'company name required' });
+    const existing = !!b.existing;
     const region = ['Philippines', 'South Africa'].includes(b.region) ? b.region : null;
-    if (!region) return json(400, { error: 'choose a region' });
-    const wsId = uid(), candId = uid();
+    if (!existing && !region) return json(400, { error: 'choose a region' });
+    const wsId = uid();
     const gen = () => String(Math.floor(1000 + Math.random() * 9000));
-    let clientPin = gen(), candidatePin = gen(); if (candidatePin === clientPin) candidatePin = gen();
-    const ws = {
-      id: wsId, company: String(b.company).trim(), customerEmail: b.customerEmail || '',
-      customerPin: clientPin, adminPin: null, createdAt: new Date().toISOString(), commissions: [],
-      onboarding: {
+    const clientPin = gen();
+    const mkCand = (name, email, role) => ({
+      id: uid(), name: String(name || 'Team member').trim(), role: String(role || ''), email: String(email || ''),
+      location: region || 'South Africa', allowance: 20, timeoff: [], candidatePin: gen(),
+      createdAt: new Date().toISOString(), kpis: { daily: [], weekly: [], monthly: [] },
+      logs: { daily: {}, weekly: {}, monthly: {} }, pulse: {}, blockers: [], kudos: [], lastActivity: null
+    });
+    let candidates, onboarding;
+    if (existing) {
+      // Already-onboarded client: skip the funnel entirely, instant dashboard access.
+      const tm = Array.isArray(b.teamMembers) ? b.teamMembers : [];
+      candidates = tm.filter(m => m && String(m.name || '').trim()).map(m => mkCand(m.name, m.email, m.role));
+      onboarding = { required: false, existingClient: true, region: region || null, status: 'complete' };
+    } else {
+      candidates = [mkCand(b.candidate || 'First hire', '', '')];
+      onboarding = {
         required: true, retainerPerHire: Math.max(0, Number(b.retainerPerHire) || 1000),
         hires: Math.max(1, Math.round(Number(b.hires) || 1)), vat: !!b.vat, region,
         status: 'pending', signed: null, paid: null, questionnaireDone: false,
         booked: false, hired: false, woDone: false, ddDone: false, sentAt: new Date().toISOString()
-      },
-      candidates: [{
-        id: candId, name: b.candidate || 'First hire', role: '', email: '', location: region, allowance: 20, timeoff: [],
-        candidatePin, createdAt: new Date().toISOString(), kpis: { daily: [], weekly: [], monthly: [] },
-        logs: { daily: {}, weekly: {}, monthly: {} }, pulse: {}, blockers: [], kudos: [], lastActivity: null
-      }]
+      };
+    }
+    const ws = {
+      id: wsId, company: String(b.company).trim(), customerEmail: b.customerEmail || '',
+      customerPin: clientPin, adminPin: null, createdAt: new Date().toISOString(), commissions: [],
+      onboarding, candidates
     };
     await store.setJSON(wsId, ws);
-    return json(200, { ok: true, wsId, clientPin, candidatePin });
+    return json(200, { ok: true, wsId, clientPin, existing, candidatePin: candidates[0] ? candidates[0].candidatePin : null, team: candidates.map(c => ({ name: c.name, candidatePin: c.candidatePin })) });
   }
   if (action === 'adminDeleteClient') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
@@ -277,7 +289,7 @@ exports.handler = async (event) => {
       const o = w.onboarding;
       return json(200, { ok: true, client: {
         id: w.id, company: w.company, region, customerEmail: w.customerEmail || '',
-        clientPin: w.customerPin || '', roomId: w.roomId || null,
+        clientPin: w.customerPin || '', roomId: w.roomId || null, existingClient: !!o.existingClient,
         // full team-member list with PINs — revealed only once the Work Order is signed
         team: o.woDone ? (w.candidates || []).map(c => ({ id: c.id, name: c.name || 'Team member', candidatePin: c.candidatePin || '' })) : null,
         teamCount: (w.candidates || []).length,
