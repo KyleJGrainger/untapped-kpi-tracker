@@ -96,9 +96,9 @@ let view='clients';
 function console_(){
   $('#topr').innerHTML=`<button class="btn ghost sm" onclick="lock()">Lock</button>`;
   el.innerHTML=`<div class="row" style="justify-content:space-between">
-      <div class="tabs"><button class="tab ${view==='clients'?'on':''}" onclick="go('clients')">Clients</button><button class="tab ${view==='new'?'on':''}" onclick="go('new')">+ New client</button></div>
+      <div class="tabs"><button class="tab ${view==='clients'?'on':''}" onclick="go('clients')">Clients</button><button class="tab ${view==='rooms'?'on':''}" onclick="go('rooms')">Rooms</button><button class="tab ${view==='new'?'on':''}" onclick="go('new')">+ New client</button></div>
     </div><div id="body"></div>`;
-  if(view==='new') newClientForm(); else clientsView();
+  if(view==='new') newClientForm(); else if(view==='rooms') roomsView(); else clientsView();
 }
 function go(v){view=v;console_();}
 function lock(){KEY=null;try{sessionStorage.removeItem('untapped_admin_key')}catch(e){}keyView();$('#topr').innerHTML='';}
@@ -297,6 +297,66 @@ async function saveWO(id){const wo={jobTitle:$('#wo_jt').value,startDate:$('#wo_
 async function addCand(id){const name=$('#nc_name').value.trim(),salary=$('#nc_sal').value,commentary=$('#nc_comm').value.trim();if(!name){$('#nc_err').textContent='Enter a name.';return;}const j=await api('adminAddCandidate',{wsId:id,name,salary,commentary});if(j.ok){toast('Candidate added');openClient(id);}else $('#nc_err').textContent=j.error||'Failed';}
 async function saveSalary(id,cid){const salary=$('#sal_'+cid).value;const j=await api('adminUpdateCandidate',{wsId:id,candidateId:cid,salary});if(j.ok){toast('Salary saved');openClient(id);}else toast(j.error||'Failed');}
 async function removeCand(id,cid){if(!confirm('Remove this candidate from the shortlist?'))return;const j=await api('adminRemoveCandidate',{wsId:id,candidateId:cid});if(j.ok){toast('Removed');openClient(id);}else toast(j.error||'Failed');}
+/* ---- Collaboration Rooms (client-facing) ---- */
+const ROOM_EP='/.netlify/functions/room';
+async function roomApi(action,extra){const r=await fetch(ROOM_EP,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,adminKey:KEY,...(extra||{})})});let j={};try{j=await r.json()}catch(e){}if(!r.ok)j.error=j.error||('HTTP '+r.status);return j;}
+async function roomsView(){
+  const box=$('#body');box.innerHTML='<div class="empty">Loading rooms…</div>';
+  const j=await roomApi('roomList');
+  if(!j.ok){box.innerHTML='<div class="empty">'+(j.error||'Failed to load rooms')+'</div>';return;}
+  const rooms=j.rooms||[];
+  let html=`<div class="row" style="justify-content:space-between;align-items:center;margin:2px 0 12px">
+      <p class="muted" style="font-size:14px;margin:0"><b style="color:#fff">${rooms.length}</b> collaboration room${rooms.length===1?'':'s'}</p>
+      <button class="btn sm" onclick="roomSyncPanel()">＋ Atlas Sync (import)</button></div><div id="roomsync"></div>`;
+  html+= rooms.length? rooms.map(r=>`<div class="card" style="padding:12px;margin-bottom:10px"><div class="row" style="justify-content:space-between;align-items:center">
+      <div><b style="font-size:14px">${esc(r.client||'—')}</b> <span class="muted">· ${esc(r.role||'')}</span>
+      <div class="muted" style="font-size:12px;margin-top:3px">${r.candidates||0} candidates · ${r.viewers||0} viewer(s) · ${r.syncedAt?('synced '+new Date(r.syncedAt).toLocaleDateString('en-GB')):'not synced'}</div></div>
+      <div class="row"><button class="btn ghost sm" onclick="copy(location.origin+'/room.html?r='+encodeURIComponent('${r.id}'))">Copy link</button><button class="btn sm" onclick="openRoom('${r.id}')">Open</button></div>
+    </div></div>`).join('') : '<div class="empty">No rooms yet. Use “Atlas Sync (import)” to create one from the morning Atlas pull.</div>';
+  box.innerHTML=html;
+}
+function roomSyncPanel(){
+  $('#roomsync').innerHTML=`<div class="panel" style="margin-bottom:12px"><h3 style="margin:0 0 6px">Atlas Sync — import room data</h3>
+    <p class="muted" style="font-size:13px;margin:0 0 8px">Paste the JSON from the morning Atlas sync (a single room object or an array). Client actions, chat and stage changes are preserved on re-sync.</p>
+    <textarea id="rs_json" style="width:100%;height:150px;background:#0d0f14;color:#cdd6df;border:1px solid var(--line);border-radius:8px;padding:10px;font-family:monospace;font-size:12px" placeholder='{"id":"...","role":"...","client":{...},"candidates":[...]}'></textarea>
+    <div id="rs_err" style="color:#ff8a80;font-size:12px;margin-top:6px"></div>
+    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="doRoomImport()">Import</button><button class="btn ghost sm" onclick="$('#roomsync').innerHTML=''">Cancel</button></div></div>`;
+}
+async function doRoomImport(){
+  let data;try{data=JSON.parse($('#rs_json').value)}catch(e){$('#rs_err').textContent='Invalid JSON — check the payload.';return;}
+  const arr=Array.isArray(data)?data:[data];let ok=0,fail=0;
+  for(const room of arr){if(!room||!room.id){fail++;continue;}const j=await roomApi('roomUpsert',{room});if(j.ok)ok++;else fail++;}
+  toast('Imported '+ok+' room(s)'+(fail?(', '+fail+' failed'):''));roomsView();
+}
+async function openRoom(id){
+  const box=$('#body');box.innerHTML='<div class="empty">Loading room…</div>';
+  const a=await roomApi('roomAnalytics',{roomId:id});
+  const g=await roomApi('roomGet',{roomId:id});
+  if(!a.ok||!g.room){box.innerHTML='<div class="empty">'+(a.error||'Failed to load room')+'</div>';return;}
+  const room=g.room;
+  let html=`<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div><b style="font-size:16px">${esc((a.client&&a.client.name)||'')}</b> <span class="muted">· ${esc(a.role||'')}</span></div>
+      <button class="btn ghost sm" onclick="go('rooms')">← All rooms</button></div>`;
+  html+=`<div class="panel" style="margin-bottom:12px"><h3 style="margin:0 0 8px">Client engagement</h3>`;
+  if((a.viewers||[]).length){
+    html+= a.viewers.map(v=>`<div style="border-bottom:1px solid var(--line);padding:8px 0">
+        <div class="row" style="justify-content:space-between"><b>${esc(v.name)}</b><span class="muted" style="font-size:12px">last seen ${v.lastSeen?new Date(v.lastSeen).toLocaleString('en-GB'):'—'}</span></div>
+        <div class="muted" style="font-size:12px">${esc(v.email)}</div>
+        ${(v.opened||[]).length?('<div style="font-size:12px;margin-top:4px;color:#cdd6df">'+v.opened.map(o=>esc(o.candidate)+': '+o.count+'× · '+Math.round(o.seconds)+'s').join('  ·  ')+'</div>'):'<div class="muted" style="font-size:12px;margin-top:4px">No profiles opened yet</div>'}
+      </div>`).join('');
+  } else html+='<p class="muted" style="font-size:13px;margin:0">No client has entered the room yet.</p>';
+  html+=`</div><div class="panel"><h3 style="margin:0 0 8px">Candidate documents</h3>
+    <p class="muted" style="font-size:13px;margin:0 0 8px">Upload a CV (PDF) and photo per candidate — these aren't in Atlas.</p>`;
+  html+= (room.candidates||[]).map(c=>`<div class="row" style="justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:10px 0">
+      <div><b>${esc(c.name)}</b> <span class="muted" style="font-size:12px">${c.hasCV?'· CV ✓':'· no CV'}${c.photo?' · photo ✓':''}</span></div>
+      <div class="row"><label class="btn ghost sm" style="cursor:pointer">CV<input type="file" accept="application/pdf" style="display:none" onchange="roomUploadCV('${id}','${c.id}',this)"></label>
+      <label class="btn ghost sm" style="cursor:pointer">Photo<input type="file" accept="image/*" style="display:none" onchange="roomUploadPhoto('${id}','${c.id}',this)"></label></div>
+    </div>`).join('')||'<p class="muted" style="font-size:13px">No candidates in this room.</p>';
+  html+=`</div>`;
+  box.innerHTML=html;
+}
+function roomUploadCV(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>6*1024*1024){toast('Max 6MB');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading CV…');const j=await roomApi('roomUploadCV',{roomId:id,candidateId:cid,dataBase64:String(r.result)});toast(j.ok?'CV uploaded':(j.error||'Upload failed'));if(j.ok)openRoom(id);};r.readAsDataURL(f);}
+function roomUploadPhoto(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>2*1024*1024){toast('Max 2MB');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading photo…');const j=await roomApi('roomUploadPhoto',{roomId:id,candidateId:cid,photo:String(r.result)});toast(j.ok?'Photo uploaded':(j.error||'Upload failed'));if(j.ok)openRoom(id);};r.readAsDataURL(f);}
 function uploadCV(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>6*1024*1024){toast('File too big (max 6MB)');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading…');const j=await api('adminUploadCV',{wsId:id,candidateId:cid,dataBase64:String(r.result)});if(j.ok){toast('CV uploaded');openClient(id);}else toast(j.error||'Upload failed');};r.readAsDataURL(f);}
 
 function newClientForm(){

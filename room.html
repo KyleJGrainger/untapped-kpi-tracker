@@ -166,9 +166,12 @@ function render(){
   });
   renderFeed();renderChat();
 }
+function photoOrInitials(c,size){const ini=esc((c.name||'?').split(' ').map(w=>w[0]).slice(0,2).join(''));
+  return c.photo?`<img src="${esc(c.photo)}" alt="" style="width:${size}px;height:${size}px;border-radius:${size>40?'12px':'8px'};object-fit:cover;border:1px solid var(--line);flex:0 0 auto">`
+    :`<div style="width:${size}px;height:${size}px;border-radius:${size>40?'12px':'8px'};background:linear-gradient(135deg,#3a2a10,#2b333d);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-weight:700;color:var(--gold);border:1px solid var(--line);flex:0 0 auto;font-size:${size>40?'22px':'12px'}">${ini}</div>`;}
 function card(c){return `<div class="card" draggable="true" ondragstart="event.dataTransfer.setData('id','${c.id}')" onclick="openD('${c.id}')">
-  <div class="nm">${esc(c.name)} <span class="stars">${stars(c.rating)}</span></div>
-  <div class="hl">${esc(c.headline||'Recruitment consultant')}</div>
+  <div style="display:flex;gap:8px;align-items:center">${photoOrInitials(c,34)}<div class="nm" style="line-height:1.2">${esc(c.name)}<br><span class="stars">${stars(c.rating)}</span></div></div>
+  <div class="hl" style="margin-top:6px">${esc(c.headline||'Recruitment consultant')}</div>
   ${(c.niche||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}
   <div class="cost">${money(c.cost)}/mo</div></div>`;}
 async function move(id,stage){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c||c.stage===stage)return;
@@ -187,7 +190,7 @@ function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return
   const cvUrl='/.netlify/functions/cv?w='+encodeURIComponent(ROOM_ID)+'&c='+encodeURIComponent(id);
   const d=document.getElementById('dpad');
   d.innerHTML=`<div style="display:flex;gap:14px;align-items:center">
-    <div class="avatar">${esc((c.name||'?').split(' ').map(w=>w[0]).slice(0,2).join(''))}</div>
+    ${photoOrInitials(c,66)}
     <div><div class="dname">${esc(c.name)} <span class="stars">${stars(c.rating)}</span></div>
     <div class="muted" style="font-size:12.5px">${esc(c.headline||'Recruitment consultant')}</div>
     <div class="muted" style="font-size:12px">${esc(c.location||'')}${c.linkedin?' · <a href="https://linkedin.com/in/'+esc(c.linkedin)+'" target="_blank">LinkedIn ↗</a>':''}</div></div></div>
