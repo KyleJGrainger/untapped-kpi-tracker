@@ -337,7 +337,7 @@ function obFunnel(step){
       <div class="heatrule"></div><div class="lab">Welcome to Untapped</div>
       <h1 style="font-size:30px">Let's get ${esc(co)} set up</h1>
       <p style="font-size:17px;line-height:1.6">Welcome to Untapped, the future of hiring. Thank you for choosing us — let's get you started.</p>
-      <div class="share" style="margin-top:14px"><b>Next steps</b><br><span class="muted">[PLACEHOLDER] 1) Sign terms · 2) Pay £${ret} retainer · 3) Complete kick-off questionnaire · 4) Access your dashboard</span></div>
+      <div class="share" style="margin-top:14px"><b>Next steps</b><br><span class="muted">1) Sign terms · 2) Pay £${ret} ${OB.selfServe?'deposit':'retainer'} · 3) Complete kick-off questionnaire · 4) Access your dashboard</span></div>
       <button class="btn" style="width:100%;margin-top:16px" onclick="App.obGo('terms')">Get started →</button>
       ${obStaffLink()}
     </div></div>`; return;
