@@ -146,6 +146,37 @@ exports.handler = async (event) => {
     return json(200, { ok: true, wsId, candidateId: candId });
   }
 
+  // Public self-serve start: a prospect begins their own onboarding from the sales landing page.
+  // Creates a workspace pre-set to the sign-terms → pay-deposit funnel. Deposit = £1000 (+ optional VAT).
+  if (action === 'startSelfServe') {
+    const company = String(b.company || '').trim();
+    const email = String(b.email || '').trim();
+    const contact = String(b.contact || '').trim();
+    const region = (b.region === 'Philippines') ? 'Philippines' : (b.region === 'South Africa' ? 'South Africa' : '');
+    if (company.length < 2) return json(400, { error: 'Please enter your company name.' });
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json(400, { error: 'Please enter a valid email.' });
+    if (!region) return json(400, { error: 'Please choose a region.' });
+    const pin = () => String(Math.floor(1000 + Math.random() * 9000));
+    const wsId = uid();
+    const ws = {
+      id: wsId, company, customerEmail: email, contactName: contact,
+      customerPin: pin(), adminPin: null, createdAt: new Date().toISOString(), commissions: [],
+      onboarding: {
+        required: true, selfServe: true, region,
+        retainerPerHire: 1000, hires: 1, vat: !!b.vat, depositLabel: 'deposit',
+        status: 'pending', signed: null, paid: null, questionnaireDone: false
+      },
+      candidates: []
+    };
+    await store.setJSON(wsId, ws);
+    const total = 1000 * (ws.onboarding.vat ? 1.2 : 1);
+    const body = `<p style="font-size:15px;color:#333">A new prospect started self-serve onboarding.</p>
+      <p style="color:#555;font-size:14px"><b>${esc(company)}</b>${contact ? ' · ' + esc(contact) : ''}<br>${esc(email)} · ${esc(region)}<br>Deposit: £${total.toFixed(0)}${ws.onboarding.vat ? ' (inc VAT)' : ''}</p>
+      <p style="color:#777;font-size:13px">They're now in the sign-terms → pay-deposit flow.</p>`;
+    await mail(TEAM, `New self-serve signup — ${company}`, emailWrap('New self-serve signup', body, ws, reqBase));
+    return json(200, { ok: true, wsId });
+  }
+
   /* =====================  UNTAPPED CENTRAL ADMIN CONSOLE  =====================
    * Global, key-gated (separate from per-client PINs). Config lives in the
    * "__config" blob. Lets Untapped create clients, list them, and track MSAs.
@@ -355,7 +386,7 @@ exports.handler = async (event) => {
     hires: Number(ws.onboarding.hires) || 1, retainerBase: obBase(), vat: !!ws.onboarding.vat, retainerTotal: obTotal(),
     region: ws.onboarding.region || null, kickoffUrl: KICKOFF[ws.onboarding.region] || '',
     status: ws.onboarding.status || 'pending', company: ws.company || '',
-    roomId: ws.roomId || null,
+    roomId: ws.roomId || null, selfServe: !!ws.onboarding.selfServe,
     signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone,
     booked: !!ws.onboarding.booked, hired: !!ws.onboarding.hired, woDone: !!ws.onboarding.woDone, ddDone: !!ws.onboarding.ddDone,
     hiredName: (ws.onboarding.hired || {}).name || '',
