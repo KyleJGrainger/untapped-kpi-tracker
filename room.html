@@ -208,13 +208,14 @@ function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return
     <div class="lbl" style="margin:16px 0 4px">EXPERIENCE</div><div class="rule"></div>
     ${(c.exp&&c.exp.length)?c.exp.map(e=>`<div class="exp"><b>${esc(e[0])}</b><div class="c">${esc(e[1])} · ${esc(e[2])}</div></div>`).join(''):'<div class="exp muted">Profile being finalised.</div>'}
     <div style="margin-top:16px;display:flex;gap:6px;flex-wrap:wrap">
-      ${c.hasCV?`<a class="btn" href="${cvUrl}" target="_blank" download>⬇ Download CV</a>`:`<button class="btn ghost" onclick="act('${c.id}','Requested CV')">Request CV</button>`}
+      ${c.hasCV?`<button class="btn" onclick="downloadCv('${c.id}')">⬇ Download CV</button>`:`<button class="btn ghost" onclick="act('${c.id}','Requested CV')">Request CV</button>`}
       ${ROOM.calendlyUrl?`<a class="btn ghost" href="${esc(ROOM.calendlyUrl)}" target="_blank">📅 Schedule interview</a>`:''}
     </div>
     <div class="note">Photo, CV file &amp; the all-in fee come from Untapped's side; everything else is synced from Atlas.</div>`;
   document.getElementById('scrim').classList.add('open');document.getElementById('drawer').classList.add('open');
 }
 function closeD(){document.getElementById('scrim').classList.remove('open');document.getElementById('drawer').classList.remove('open');}
+function downloadCv(id){const url='/.netlify/functions/cv?w='+encodeURIComponent(ROOM_ID)+'&c='+encodeURIComponent(id);window.open(url,'_blank');toast('Opening CV…');api('roomCvDownload',{candidateId:id,viewer:VIEWER.name});}
 async function act(id,label){const c=(ROOM.candidates||[]).find(x=>x.id===id);toast(`${label} — ${c.name}. Team notified.`);closeD();
   const j=await api('roomAction',{candidateId:id,actionLabel:label,viewer:VIEWER.name});if(j.room){ROOM=j.room;render();}}
 let tt;function toast(m){let e=document.getElementById('toast');if(!e){e=document.createElement('div');e.id='toast';e.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--bg);font-weight:700;padding:10px 16px;border-radius:10px;z-index:50;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:.3s';document.body.appendChild(e);}e.textContent=m;e.style.opacity=1;clearTimeout(tt);tt=setTimeout(()=>e.style.opacity=0,2600);}
