@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Untapped — Global talent, teammates not outsourcers</title>
+<title>Untapped — Global talent, teammates not outsources</title>
 <style>
   :root{
     --black:#101820;--red:#DA291C;--orange:#FF6900;--yellow:#FFC600;--white:#FFFFFF;--red-bright:#FF5A48;
@@ -196,12 +196,21 @@ function route(){
 function landing(){
   const CAL='https://calendly.com/try-untapped/intro-to-untapped';
   const S=(t)=>`<div style="max-width:920px;margin:0 auto;padding:0 22px"><div class="lab" style="text-align:center">${t}</div><div style="width:34px;height:3px;background:#FF6900;margin:6px auto 22px"></div>`;
-  el.innerHTML=`<div style="padding-bottom:70px">
+  el.innerHTML=`<div style="padding-bottom:70px;overflow-x:hidden">
+    <style>
+      @media(max-width:640px){
+        .lp-hero{padding-top:40px !important}
+        .lp-hero h1{font-size:30px !important}
+        .lp-hero .sub, .lp-hero p{font-size:15px !important}
+        .lp-proof{grid-template-columns:repeat(2,1fr) !important}
+        .lp-steps{grid-template-columns:1fr !important}
+      }
+    </style>
     <!-- HERO -->
-    <div style="max-width:820px;margin:0 auto;padding:64px 22px 30px;text-align:center">
+    <div class="lp-hero" style="max-width:820px;margin:0 auto;padding:64px 22px 30px;text-align:center">
       <div class="heatrule" style="max-width:110px;margin:0 auto 20px"></div>
       <div class="lab">The future of hiring</div>
-      <h1 style="font-family:Iowan Old Style,Georgia,serif;font-size:44px;line-height:1.1;margin:10px 0 14px">Elite global talent —<br><span style="color:#FFC600">teammates, not outsourcers</span></h1>
+      <h1 style="font-family:Iowan Old Style,Georgia,serif;font-size:44px;line-height:1.1;margin:10px 0 14px">Elite global talent —<br><span style="color:#FFC600">teammates, not outsources</span></h1>
       <p class="muted" style="font-size:17px;line-height:1.6;max-width:620px;margin:0 auto">Hire rigorously-vetted Talent from South Africa &amp; the Philippines — aligned to your hours and culture, for 50–70% less than UK equivalents.</p>
       <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:26px">
         <button class="btn" style="padding:13px 26px;font-size:15px" onclick="App.selfServeStart()">Start hiring →</button>
