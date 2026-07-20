@@ -377,6 +377,17 @@ function obFunnel(step){
   }
   // shortlist — the candidate presentation page (client reviews candidates while Untapped finalises the hire)
   const list=(OB&&OB.shortlist)||[];
+  // If this client is linked to a collaboration room, send them there (the new Atlas-seeded experience).
+  if(OB&&OB.roomId){
+    el.innerHTML=`<div class="center"><div class="card" style="max-width:600px;width:100%;text-align:center">
+      <div class="heatrule" style="margin:0 auto 14px"></div>
+      <div class="lab">Your candidates are ready</div>
+      <h1 style="font-size:26px;margin:6px 0 2px">Your candidate room is live</h1>
+      <p class="muted" style="font-size:15px;line-height:1.6">Review your shortlist, compare profiles and request interviews in your dedicated collaboration room.</p>
+      <a class="btn" style="display:inline-block;margin-top:16px;text-decoration:none" href="/room.html?r=${encodeURIComponent(OB.roomId)}" target="_blank">Open your candidate room →</a>
+      <div style="margin-top:12px"><button class="btn ghost sm" onclick="App.reqCheckin()">Request check-in with delivery lead</button></div>
+    </div></div>`; return;
+  }
   if(!list.length){
     el.innerHTML=`<div class="center"><div class="card" style="max-width:560px;width:100%;text-align:center">
       <div class="heatrule" style="margin:0 auto 14px"></div>

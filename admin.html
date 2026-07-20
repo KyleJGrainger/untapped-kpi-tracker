@@ -189,6 +189,10 @@ async function openClient(id){
     <h1 style="font-size:23px;margin:6px 0 2px">${esc(c.company)}</h1>
     <p class="muted" style="font-size:13px">${esc(c.region||'—')} · retainer £${((c.vat?c.retainerPerHire*c.hires*1.2:c.retainerPerHire*c.hires)||0).toFixed(0)} · <a href="${location.origin+'/?w='+c.id}" target="_blank" style="color:#ffb27a">client link ↗</a></p>
     <div style="margin:12px 0">${step(!!c.signed,'MSA signed')}${step(!!c.paid,'Retainer paid')}${step(!!c.questionnaireDone,'Questionnaire')}${step(!!c.booked,'Kick-off booked')}${step(!!c.hired,'Hired')}${step(!!c.woDone,'Work Order')}${step(!!c.ddDone,'Direct Debit')}</div>
+    <div class="month">Collaboration room</div>
+    <div class="card" id="roomlinkcard">${c.roomId
+      ? `<div class="row" style="justify-content:space-between;align-items:center"><div><b>Linked room</b><div class="muted" style="font-size:12px">${esc(c.roomId)}</div><div class="muted" style="font-size:12px">Shows in the client's dashboard at the shortlist step.</div></div><div class="row"><a class="btn ghost sm" href="${location.origin+'/room.html?r='+encodeURIComponent(c.roomId)}" target="_blank">Open room ↗</a><button class="btn ghost sm" onclick="roomPicker('${c.id}')">Change</button></div></div>`
+      : `<div class="row" style="justify-content:space-between;align-items:center"><div class="muted" style="font-size:13px">No room linked. Link this client to their Atlas role so their room appears in their dashboard.</div><button class="btn sm" onclick="roomPicker('${c.id}')">Link a room</button></div>`}</div>
     <div class="month">Access PINs</div>
     <div class="card">
       <div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Client PIN</div>
@@ -256,6 +260,16 @@ function workOrderEditor(c){
         :'<div class="muted" style="font-size:12px;margin-top:8px">Awaiting the client to add their details &amp; sign in their funnel.</div>'}
     </div>`;
 }
+async function roomPicker(id){
+  const card=$('#roomlinkcard');card.innerHTML='<div class="muted" style="font-size:13px">Loading rooms…</div>';
+  const j=await roomApi('roomList');
+  if(!j.ok){card.innerHTML='<div class="muted" style="font-size:13px">'+(j.error||'Failed to load rooms')+'</div>';return;}
+  const opts=(j.rooms||[]).map(r=>`<option value="${esc(r.id)}">${esc(r.client||'')} · ${esc(r.role||'')} (${esc(r.id)})</option>`).join('');
+  card.innerHTML=`<label class="fl">Choose the Atlas role / room for this client</label>
+    <select id="room_sel" style="width:100%">${opts||'<option value="">No rooms yet — run the Atlas sync first</option>'}</select>
+    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="linkRoom('${id}')">Link room</button><button class="btn ghost sm" onclick="linkRoom('${id}','')">Unlink</button></div>`;
+}
+async function linkRoom(id,forced){const roomId=(forced!==undefined)?forced:$('#room_sel').value;const j=await api('adminLinkRoom',{wsId:id,roomId});if(j.ok){toast(roomId?'Room linked':'Room unlinked');openClient(id);}else toast(j.error||'Failed');}
 async function countersignMSA(id){const name=prompt('Counter-sign the MSA as Untapped. Your name:','Kyle Grainger');if(!name)return;const title=prompt('Your title:','CEO')||'CEO';const j=await api('adminCountersignMSA',{wsId:id,name,title});if(j.ok){toast('MSA counter-signed');openClient(id);}else toast(j.error||'Failed');}
 async function countersignWO(id){const name=prompt('Counter-sign the Work Order as Untapped. Your name:','Kyle Grainger');if(!name)return;const title=prompt('Your title:','CEO')||'CEO';const j=await api('adminCountersignWO',{wsId:id,name,title});if(j.ok){toast('Work Order counter-signed');openClient(id);}else toast(j.error||'Failed');}
 function printRecord(id,kind){
