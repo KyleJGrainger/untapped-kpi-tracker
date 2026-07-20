@@ -204,10 +204,29 @@ exports.handler = async (event) => {
     cfg.adminKey = String(b.adminKey); await store.setJSON('__config', cfg);
     return json(200, { ok: true });
   }
+  // TEMPORARY: clears the admin PIN so the owner can set a fresh one. Remove after use.
+  if (action === 'adminResetKey') {
+    const cfg = (await store.get('__config', { type: 'json' })) || {};
+    delete cfg.adminKey; await store.setJSON('__config', cfg);
+    return json(200, { ok: true });
+  }
   const adminAuthed = async () => {
     const cfg = await store.get('__config', { type: 'json' });
     return !!(cfg && cfg.adminKey && String(b.adminKey || '') === String(cfg.adminKey));
   };
+  // Bulk wipe of client workspaces (keeps __config, rooms and CVs). Guarded + confirm required.
+  if (action === 'adminClearAll') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    if (b.confirm !== 'DELETE') return json(400, { error: 'confirmation required' });
+    const { blobs } = await store.list();
+    let deleted = 0;
+    for (const bl of blobs) {
+      if (bl.key === '__config') continue;      // keep admin config
+      if (bl.key.includes(':')) continue;        // keep room:* and cv:* blobs
+      await store.delete(bl.key); deleted++;      // client workspaces only
+    }
+    return json(200, { ok: true, deleted });
+  }
   if (action === 'adminList') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     const { blobs } = await store.list();
