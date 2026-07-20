@@ -126,6 +126,7 @@ exports.handler = async (event) => {
     let r = await store.get(key(id), { type: 'json' });
     if (!r && id === SEED.id) r = JSON.parse(JSON.stringify(SEED)); // pilot fallback
     if (!r && id === DEMO_SEED.id) { r = JSON.parse(JSON.stringify(DEMO_SEED)); r.candidates.forEach(c => c.hasCV = true); } // demo fallback: CVs available
+    if (!r && id === 'demo-co-ph') { r = JSON.parse(JSON.stringify(DEMO_SEED)); r.id = 'demo-co-ph'; r.region = 'Philippines'; r.client = { name: 'Demo Co PH', contactName: 'Sam Client' }; r.candidates.forEach(c => c.hasCV = true); } // PH-region demo (routes to PH channel)
     return r;
   }
   const save = (r) => store.setJSON(key(r.id), r);
