@@ -144,11 +144,12 @@ async function payoutsView(){
     <p class="muted" style="font-size:14px;margin:0">Philippines · Wise payouts · <b style="color:#fff">${rows.length}</b> registered</p>
     <div class="row"><button class="btn ghost sm" onclick="clientsView()">← Back</button><button class="btn sm" onclick="savePayoutsAndExport()">Save &amp; download CSV</button></div></div>`;
   if(!rows.length){box.innerHTML=html+'<div class="empty">No PH candidates have registered Wise details yet.</div>';return;}
-  html+=`<p class="muted" style="font-size:13px;margin:0 0 10px">Set or adjust each monthly amount (plain number, GBP — no commas or £). Where a Work Order salary exists you can pull it in with one click.</p>
+  html+=`<p class="muted" style="font-size:13px;margin:0 0 10px">Enter each person's <b style="color:#fff">Wise recipient ID</b> (copy it from your Wise account — the candidate won't know it) and set/adjust the monthly amount (plain number, GBP — no commas or £). Where a Work Order salary exists you can pull it in with one click.</p>
     <div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:14px">
-    <tr style="text-align:left"><th style="padding:9px 12px;border-bottom:1px solid #272c37;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9a">Name</th><th style="padding:9px 12px;border-bottom:1px solid #272c37;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9a">Target</th><th style="padding:9px 12px;border-bottom:1px solid #272c37;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9a">Amount (GBP)</th></tr>`;
+    <tr style="text-align:left"><th style="padding:9px 12px;border-bottom:1px solid #272c37;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9a">Name</th><th style="padding:9px 12px;border-bottom:1px solid #272c37;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9a">Wise recipient ID</th><th style="padding:9px 12px;border-bottom:1px solid #272c37;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9a">Target</th><th style="padding:9px 12px;border-bottom:1px solid #272c37;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9a">Amount (GBP)</th></tr>`;
   html+=rows.map((r,i)=>`<tr>
     <td style="padding:8px 12px;border-bottom:1px solid #1a1f29"><b>${esc(r.name)}</b><div class="muted" style="font-size:12px">${esc(r.company||'')}${r.email?' · '+esc(r.email):''}</div></td>
+    <td style="padding:8px 12px;border-bottom:1px solid #1a1f29"><input id="ri_${i}" value="${esc(r.recipientId||'')}" placeholder="Wise recipient ID" style="width:250px;font-size:12px"></td>
     <td style="padding:8px 12px;border-bottom:1px solid #1a1f29">${esc(r.targetCurrency||'PHP')}</td>
     <td style="padding:8px 12px;border-bottom:1px solid #1a1f29"><input id="pa_${i}" value="${esc(r.amount||'')}" placeholder="0.00" style="width:110px;display:inline-block">${r.woSalary?` <button class="btn ghost sm" style="padding:4px 8px" onclick="document.getElementById('pa_${i}').value='${r.woSalary}'">Use WO £${r.woSalary}</button>`:''}</td>
   </tr>`).join('');
@@ -158,9 +159,9 @@ async function payoutsView(){
 async function savePayoutsAndExport(){
   const rows=window.__payoutRows||[];
   for(let i=0;i<rows.length;i++){
-    const inp=document.getElementById('pa_'+i); if(!inp)continue;
-    const v=inp.value.trim();
-    if(v!==(rows[i].amount||'')){const j=await api('adminSetPayoutAmount',{wsId:rows[i].wsId,candidateId:rows[i].candidateId,amount:v});if(!j.ok){toast((j.error||'Save failed')+' — '+rows[i].name);return;}rows[i].amount=v;}
+    const pa=document.getElementById('pa_'+i), ri=document.getElementById('ri_'+i);
+    const v=pa?pa.value.trim():(rows[i].amount||''); const rid=ri?ri.value.trim():(rows[i].recipientId||'');
+    if(v!==(rows[i].amount||'')||rid!==(rows[i].recipientId||'')){const j=await api('adminSetPayoutAmount',{wsId:rows[i].wsId,candidateId:rows[i].candidateId,amount:v,recipientId:rid});if(!j.ok){toast((j.error||'Save failed')+' — '+rows[i].name);return;}rows[i].amount=v;rows[i].recipientId=rid;}
   }
   const j=await api('adminExportPayouts');
   if(!j.ok){toast(j.error||'Export failed');return;}
