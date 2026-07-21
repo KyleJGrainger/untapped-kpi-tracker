@@ -727,8 +727,11 @@ exports.handler = async (event) => {
   }
   if (action === 'addBlocker') {
     if (role !== 'candidate') return json(403, { error: 'forbidden' });
-    c.blockers = c.blockers || []; c.blockers.unshift({ id: uid(), text: String(b.text || '').slice(0, 600), ts: new Date().toISOString(), resolved: false });
-    c.lastActivity = new Date().toISOString(); await save(); return json(200, { ok: true });
+    c.blockers = c.blockers || []; const bl = { id: uid(), text: String(b.text || '').slice(0, 600), ts: new Date().toISOString(), resolved: false }; c.blockers.unshift(bl);
+    c.lastActivity = new Date().toISOString(); await save();
+    const body = `<p style="font-size:15px;color:#333;margin:0 0 10px"><b>${esc(c.name)}</b> has raised a blocker that needs your attention.</p><p style="color:#333;font-size:14px">${esc(bl.text)}</p>`;
+    await mail(ws.customerEmail, `Blocker raised — ${c.name} (${ws.company || 'Untapped'})`, emailWrap('New blocker', body, ws, reqBase));
+    return json(200, { ok: true });
   }
   if (action === 'resolveBlocker') {
     const bl = (c.blockers || []).find(x => x.id === b.blockerId); if (bl) bl.resolved = true; await save(); return json(200, { ok: true });
