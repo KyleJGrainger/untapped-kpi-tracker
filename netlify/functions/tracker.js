@@ -264,6 +264,35 @@ exports.handler = async (event) => {
     rows.sort((a, b2) => String(a.name).localeCompare(String(b2.name)));
     return json(200, { ok: true, rows });
   }
+  // List PH payouts for the admin editor (includes the Work Order monthly salary to prefill the amount).
+  if (action === 'adminListPayouts') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const { blobs } = await store.list();
+    const rows = [];
+    for (const bl of blobs) {
+      if (bl.key === '__config' || bl.key.includes(':')) continue;
+      const w = await store.get(bl.key, { type: 'json' }); if (!w) continue;
+      const wo = w.onboarding && w.onboarding.workOrder;
+      const woSalary = wo && Number(wo.grossSalaryMonthly) ? Number(wo.grossSalaryMonthly) : null;
+      for (const c of (w.candidates || [])) {
+        if (c.location === 'Philippines' && c.payout) {
+          rows.push({ wsId: w.id, candidateId: c.id, name: c.payout.name || c.name || '', email: c.payout.email || '', targetCurrency: c.payout.targetCurrency || 'PHP', amount: c.payout.amount || '', woSalary, company: w.company || '' });
+        }
+      }
+    }
+    rows.sort((a, b2) => String(a.name).localeCompare(String(b2.name)));
+    return json(200, { ok: true, rows });
+  }
+  // Admin sets/edits a PH candidate's Wise payout amount (plain number; blank allowed).
+  if (action === 'adminSetPayoutAmount') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'client not found' });
+    const c = (w.candidates || []).find(x => x.id === b.candidateId); if (!c || !c.payout) return json(404, { error: 'candidate/payout not found' });
+    const amt = String(b.amount == null ? '' : b.amount).trim();
+    if (amt !== '' && !/^\d+(\.\d{1,2})?$/.test(amt)) return json(400, { error: 'Amount must be a plain number — no commas, no £.' });
+    c.payout.amount = amt; await store.setJSON(b.wsId, w);
+    return json(200, { ok: true });
+  }
   if (action === 'adminCreateClient') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     if (!String(b.company || '').trim()) return json(400, { error: 'company name required' });
@@ -764,12 +793,11 @@ exports.handler = async (event) => {
     const name = String(b.name || '').trim();
     const email = String(b.email || '').trim();
     const target = String(b.targetCurrency || '').toUpperCase();
-    const amountRaw = String(b.amount == null ? '' : b.amount).trim();
     if (name.length < 2) return json(400, { error: 'Enter your full name (must match your Wise account).' });
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json(400, { error: 'Enter a valid email.' });
     if (!['PHP', 'GBP'].includes(target)) return json(400, { error: 'Choose a target currency.' });
-    if (!/^\d+(\.\d{1,2})?$/.test(amountRaw)) return json(400, { error: 'Amount must be a plain number — no commas, no £ (e.g. 1502.10).' });
-    c.payout = { name, email, sourceCurrency: 'GBP', targetCurrency: target, amountCurrency: 'source', amount: amountRaw, receiverType: 'PERSON', registeredAt: new Date().toISOString() };
+    const prevPayout = c.payout || {};
+    c.payout = { name, email, sourceCurrency: 'GBP', targetCurrency: target, amountCurrency: 'source', amount: prevPayout.amount || '', receiverType: 'PERSON', registeredAt: prevPayout.registeredAt || new Date().toISOString() };
     c.lastActivity = new Date().toISOString(); await save();
     const body = `<p style="font-size:15px;color:#333;margin:0 0 12px"><b>${esc(name)}</b> has registered their Wise payment details.</p>
       <table style="border-collapse:collapse;font-size:14px;margin:0 0 8px">
@@ -778,8 +806,8 @@ exports.handler = async (event) => {
       <tr><td style="padding:4px 16px 4px 0;color:#777">Source currency</td><td style="padding:4px 0">GBP</td></tr>
       <tr><td style="padding:4px 16px 4px 0;color:#777">Target currency</td><td style="padding:4px 0">${esc(target)}</td></tr>
       <tr><td style="padding:4px 16px 4px 0;color:#777">Amount currency</td><td style="padding:4px 0">source</td></tr>
-      <tr><td style="padding:4px 16px 4px 0;color:#777">Amount</td><td style="padding:4px 0">${esc(amountRaw)}</td></tr>
       </table>
+      <p style="color:#777;font-size:13px;margin:0 0 6px">Amount will be set by Untapped from the Work Order before payment.</p>
       <p style="color:#777;font-size:13px">Company: ${esc(ws.company || '—')}</p>`;
     await mail(['Nina@tryuntapped.com', 'finance@createandadapt.com'], `Wise details registered — ${name} (${ws.company || 'Untapped'})`, emailWrap('Wise payment details', body, ws, reqBase));
     return json(200, { ok: true });
