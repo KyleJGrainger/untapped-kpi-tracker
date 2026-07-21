@@ -720,9 +720,7 @@ function payoutGate(c){
       </div>
       <label class="fl">Target currency</label>
       <select id="po_target"><option value="">Choose…</option><option value="PHP">PHP</option><option value="GBP">GBP</option></select>
-      <label class="fl">Amount</label>
-      <input id="po_amount" inputmode="decimal" placeholder="e.g. 1502.10">
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Plain number only — no commas and no £ sign (e.g. 1502.10).</p>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Your payment amount is set by Untapped from your Work Order — you don't need to enter it here.</p>
       <div class="err" id="po_err" style="margin-top:8px"></div>
       <button class="btn" style="margin-top:14px" onclick="App.savePayout()">Save &amp; enter dashboard</button>
     </div>`;
@@ -808,12 +806,11 @@ const App={
   setScale:(name,n)=>{pulseDraft[name]=n;document.querySelectorAll(`[data-sc="${name}"] button`).forEach((b,i)=>b.classList.toggle('on',i+1===n));},
   savePulse:async()=>{const wk=weekKey(new Date());const note=$('#pnote').value;const ts=new Date().toISOString();const j=await api('savePulse',{candidateId:ME.id,weekKey:wk,workload:pulseDraft.workload,confidence:pulseDraft.confidence,supported:pulseDraft.supported,note,ts});if(j.ok){ME.pulse=ME.pulse||{};ME.pulse[wk]={...pulseDraft,note,ts};$('#pok').textContent='Saved ✓';}},
   raiseBlocker:async()=>{const t=$('#bnew').value.trim();if(!t)return;const j=await api('addBlocker',{candidateId:ME.id,text:t});if(j.ok){blockerDraft='';await refresh();renderKBody();toast('Blocker raised');}},
-  savePayout:async()=>{const name=$('#po_name').value.trim(),email=$('#po_email').value.trim(),target=$('#po_target').value,amount=$('#po_amount').value.trim(),err=$('#po_err');err.textContent='';
+  savePayout:async()=>{const name=$('#po_name').value.trim(),email=$('#po_email').value.trim(),target=$('#po_target').value,err=$('#po_err');err.textContent='';
     if(name.length<2){err.textContent='Enter your full name (must match your Wise account).';return;}
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){err.textContent='Enter a valid email.';return;}
     if(!target){err.textContent='Choose your target currency.';return;}
-    if(!/^\d+(\.\d{1,2})?$/.test(amount)){err.textContent='Amount must be a plain number — no commas, no £ (e.g. 1502.10).';return;}
-    const j=await api('savePayout',{candidateId:ME.id,name,email,targetCurrency:target,amount});
+    const j=await api('savePayout',{candidateId:ME.id,name,email,targetCurrency:target});
     if(j.ok){await refresh();candidateApp();toast('Payment details saved');}else{err.textContent=j.error||'Could not save';}},
   // customer view switch
   cView:v=>{cView=v;customerApp();},
