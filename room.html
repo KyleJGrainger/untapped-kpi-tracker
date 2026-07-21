@@ -194,7 +194,7 @@ function renderFeed(){const f=ROOM.activity||[];const el=document.getElementById
 }
 function fmtT(ts){try{return new Date(ts).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}catch(e){return''}}
 function renderChat(){document.getElementById('chat').innerHTML=(ROOM.chat||[]).map(m=>msgHtml(m)).join('')||'<div class="muted" style="font-size:12px">No messages yet.</div>';}
-function msgHtml(m){return `<div class="msg"><div class="who">${esc(m.who)} <span>· ${esc(m.side||'')} · ${fmtT(m.ts)}</span></div><div>${esc(m.body)}</div>`+
+function msgHtml(m){return `<div class="msg">${m.candidateName?`<div style="font-size:10.5px;color:var(--gold);letter-spacing:.4px;margin-bottom:3px">↳ on ${esc(m.candidateName)}</div>`:''}<div class="who">${esc(m.who)} <span>· ${esc(m.side||'')} · ${fmtT(m.ts)}</span></div><div>${esc(m.body)}</div>`+
   (m.replies||[]).map(r=>`<div class="reply"><div class="who">${esc(r.who)} <span>· ${esc(r.side||'')} · ${fmtT(r.ts)}</span></div><div>${esc(r.body)}</div></div>`).join('')+`</div>`;}
 async function send(){const i=document.getElementById('msg');const v=i.value.trim();if(!v)return;i.value='';
   const j=await api('roomComment',{body:v,viewer:VIEWER.name,side:'Client'});if(j.room){ROOM=j.room;renderChat();renderFeed();}}
@@ -202,6 +202,10 @@ function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return
   api('roomView',{candidateId:id,name:VIEWER.name,email:VIEWER.email,seconds:0});
   const cvUrl='/.netlify/functions/cv?w='+encodeURIComponent(ROOM_ID)+'&c='+encodeURIComponent(id);
   const stages=ROOM.stages||[]; const ci=stages.findIndex(s=>s.id===c.stage); const curLabel=(stages[ci]||{}).label||'—'; const fwd=stages.slice(ci+1);
+  const region=ROOM.region; const sal=Number(c.salary)||0; let costRows;
+  if(sal>0){const pct=region==='Philippines'?0.35:0.25,fee=region==='Philippines'?150:325,flabel=region==='Philippines'?'Payroll':'EOR',svc=sal*pct,total=sal+svc+fee;
+    costRows=`<div class="kv"><span class="k">Base salary</span><span>${money(sal)}/mo</span></div><div class="kv"><span class="k">Untapped service charge (${Math.round(pct*100)}%)</span><span>${money(Math.round(svc))}/mo</span></div><div class="kv"><span class="k">${flabel} &amp; compliance</span><span>${money(fee)}/mo</span></div><div class="kv"><span class="k" style="color:#fff;font-weight:700">Total monthly (all-in)</span><span style="color:var(--gold);font-weight:700">${money(Math.round(total))}/mo</span></div>`;
+  } else { costRows=`<div class="kv"><span class="k">Monthly cost (all-in)</span><span style="color:var(--gold);font-weight:700">${money(c.cost)}/mo</span></div>`; }
   const d=document.getElementById('dpad');
   d.innerHTML=`<div style="display:flex;gap:14px;align-items:center">
     ${photoOrInitials(c,66)}
@@ -211,9 +215,10 @@ function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return
     <div style="margin:12px 0 2px"><span class="tag" style="background:#1c2530;border-color:#3a4552;color:#cdd6df">Current stage: <b style="color:#fff">${esc(curLabel)}</b></span></div>
     <div class="acts">
       ${fwd.map(s=>`<button class="btn sm" onclick="moveStage('${c.id}','${s.id}')">→ ${esc(s.label)}</button>`).join('')||'<span class="muted" style="font-size:12px">Final stage.</span>'}
-      <button class="btn sm ghost" style="border-color:#5a2b28;color:#e88" onclick="act('${c.id}','Not for us')">Not for us</button>
+      <button class="btn sm ghost" style="border-color:#5a2b28;color:#e88" onclick="declineUI('${c.id}')">Not for us</button>
     </div>
-    <div class="kv"><span class="k">Monthly cost (all-in)</span><span style="color:var(--gold);font-weight:700">${money(c.cost)}/mo</span></div>
+    <div id="declinebox"></div>
+    ${costRows}
     <div class="kv"><span class="k">Rec-Niche</span><span>${(c.niche||[]).join(', ')||'—'}</span></div>
     <div class="kv"><span class="k">Rec-Scope</span><span>${(c.scope||[]).join(', ')||'—'}</span></div>
     ${c.mkt?`<div class="kv"><span class="k">Market experience</span><span>${c.mkt.join(', ')}</span></div>`:''}
@@ -223,15 +228,32 @@ function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return
     ${c.hasCV?`<div class="lbl" style="margin:16px 0 4px">CV</div><div class="rule"></div><iframe src="${cvUrl}" style="width:100%;height:440px;border:1px solid var(--line);border-radius:10px;background:#fff" title="Candidate CV"></iframe>`:''}
     <div style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap">
       ${c.hasCV?`<button class="btn" onclick="downloadCv('${c.id}')">⬇ Download CV</button>`:`<button class="btn ghost" onclick="act('${c.id}','Requested CV')">Request CV</button>`}
-      ${ROOM.calendlyUrl?`<a class="btn ghost" href="${esc(ROOM.calendlyUrl)}" target="_blank">📅 Schedule interview</a>`:''}
     </div>
-    <div class="note">Photo, CV file &amp; the all-in fee come from Untapped's side; everything else is synced from Atlas.</div>`;
+    <div class="lbl" style="margin:18px 0 4px">FEEDBACK</div><div class="rule"></div>
+    <div id="candfb">${feedbackHtml(c.id)}</div>
+    <div class="chatbox" style="margin-top:8px"><input id="fbinput" placeholder="Leave feedback on ${esc((c.name||'').split(' ')[0])}…"><button class="btn" onclick="addCandFeedback('${c.id}')">Send</button></div>
+    <div class="note" style="margin-top:16px">Photo, CV file &amp; the fee come from Untapped's side; everything else is synced from Atlas.</div>`;
   document.getElementById('scrim').classList.add('open');document.getElementById('drawer').classList.add('open');
 }
 function closeD(){document.getElementById('scrim').classList.remove('open');document.getElementById('drawer').classList.remove('open');}
 function downloadCv(id){const url='/.netlify/functions/cv?w='+encodeURIComponent(ROOM_ID)+'&c='+encodeURIComponent(id);window.open(url,'_blank');toast('Opening CV…');api('roomCvDownload',{candidateId:id,viewer:VIEWER.name});}
-async function act(id,label){const c=(ROOM.candidates||[]).find(x=>x.id===id);toast(`${label} — ${c.name}. Team notified.`);closeD();
-  const j=await api('roomAction',{candidateId:id,actionLabel:label,viewer:VIEWER.name});if(j.room){ROOM=j.room;render();}}
+function feedbackHtml(cid){const fb=(ROOM.chat||[]).filter(m=>m.candidateId===cid);return fb.length?fb.map(m=>`<div class="msg"><div class="who">${esc(m.who)} <span>· ${esc(m.side||'')} · ${fmtT(m.ts)}</span></div><div>${esc(m.body)}</div></div>`).join(''):'<div class="muted" style="font-size:12px">No feedback yet.</div>';}
+async function addCandFeedback(id){const i=document.getElementById('fbinput');const v=(i.value||'').trim();if(!v)return;i.value='';const j=await api('roomComment',{body:v,viewer:VIEWER.name,side:'Client',candidateId:id});if(j.room){ROOM=j.room;const el=document.getElementById('candfb');if(el)el.innerHTML=feedbackHtml(id);renderChat();renderFeed();}}
+function declineUI(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);const stages=ROOM.stages||[];const ci=stages.findIndex(s=>s.id===c.stage);const ii=stages.findIndex(s=>s.id==='interview');const needNote=ii>=0&&ci>=ii;
+  const reasons=['Salary / cost','Experience gap','Skills mismatch','Culture / communication','Timing / on hold','Other'];
+  document.getElementById('declinebox').innerHTML=`<div class="card" style="margin-top:8px;background:#20130c;border-color:#5a2b28">
+    <div class="lbl" style="color:#e88">DECLINE — ${esc(c.name)}</div>
+    <label class="muted" style="font-size:11.5px;display:block;margin-top:6px">Reason</label>
+    <select id="dc_reason" style="width:100%;margin-top:4px">${reasons.map(r=>`<option>${r}</option>`).join('')}</select>
+    <label class="muted" style="font-size:11.5px;display:block;margin-top:8px">Note ${needNote?'(required at this stage)':'(optional)'}</label>
+    <textarea id="dc_note" style="width:100%;height:64px;background:var(--panel2);border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;margin-top:4px"></textarea>
+    <div class="row" style="margin-top:8px;gap:6px"><button class="btn sm" style="background:#DA291C;color:#fff" onclick="confirmDecline('${id}',${needNote})">Confirm decline</button><button class="btn sm ghost" onclick="document.getElementById('declinebox').innerHTML=''">Cancel</button></div>
+    <div id="dc_err" style="color:#e88;font-size:12px;margin-top:6px"></div>
+  </div>`;
+}
+function confirmDecline(id,needNote){const reason=document.getElementById('dc_reason').value;const note=(document.getElementById('dc_note').value||'').trim();if(needNote&&!note){document.getElementById('dc_err').textContent='Please add a note for this stage.';return;}act(id,'Not for us',{reason,note});}
+async function act(id,label,extra){const c=(ROOM.candidates||[]).find(x=>x.id===id);toast(`${label} — ${c.name}. Team notified.`);closeD();
+  const j=await api('roomAction',{candidateId:id,actionLabel:label,viewer:VIEWER.name,...(extra||{})});if(j.room){ROOM=j.room;render();}}
 let tt;function toast(m){let e=document.getElementById('toast');if(!e){e=document.createElement('div');e.id='toast';e.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--bg);font-weight:700;padding:10px 16px;border-radius:10px;z-index:50;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:.3s';document.body.appendChild(e);}e.textContent=m;e.style.opacity=1;clearTimeout(tt);tt=setTimeout(()=>e.style.opacity=0,2600);}
 boot();
 </script>
