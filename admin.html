@@ -115,7 +115,7 @@ async function clientsView(){
   if(!cl.length){box.innerHTML='<div class="empty">No clients yet. Use “+ New client” to set one up.</div>';return;}
   const head=`<div class="row" style="justify-content:space-between;align-items:center;margin:2px 0 12px">
       <p class="muted" style="font-size:14px;margin:0"><b style="color:#fff">${cl.length}</b> client${cl.length===1?'':'s'} · <b style="color:#ff8a80">${outstanding}</b> outstanding MSA${outstanding===1?'':'s'}</p>
-      <div class="row"><button class="btn ghost sm ${clientView_mode==='board'?'':''}" onclick="setMode('board')" style="${clientView_mode==='board'?'border-color:#FFC600;color:#fff':''}">Board</button><button class="btn ghost sm" onclick="setMode('months')" style="${clientView_mode==='months'?'border-color:#FFC600;color:#fff':''}">By month</button><button class="btn ghost sm" onclick="exportPayouts()">⬇ Wise CSV (PH)</button><button class="btn ghost sm" style="border-color:#DA291C;color:#ff8a80" onclick="clearAllClients()">Clear all</button></div>
+      <div class="row"><button class="btn ghost sm ${clientView_mode==='board'?'':''}" onclick="setMode('board')" style="${clientView_mode==='board'?'border-color:#FFC600;color:#fff':''}">Board</button><button class="btn ghost sm" onclick="setMode('months')" style="${clientView_mode==='months'?'border-color:#FFC600;color:#fff':''}">By month</button><button class="btn ghost sm" onclick="payoutsView()">⬇ Wise payouts (PH)</button><button class="btn ghost sm" style="border-color:#DA291C;color:#ff8a80" onclick="clearAllClients()">Clear all</button></div>
     </div>`;
   if(clientView_mode==='months'){
     const groups={}; cl.forEach(c=>{const m=monthKey(c.sentAt);(groups[m]=groups[m]||[]).push(c);});
@@ -135,17 +135,43 @@ async function clientsView(){
 }
 function setMode(m){clientView_mode=m;clientsView();}
 async function clearAllClients(){const t=prompt('This permanently deletes ALL client workspaces (a full reset). Rooms & admin config are kept. Type DELETE to confirm.');if(t!=='DELETE'){if(t!==null)toast('Not cleared — you must type DELETE');return;}const j=await api('adminClearAll',{confirm:'DELETE'});if(j.ok){toast('Cleared '+(j.deleted||0)+' workspace(s)');clientsView();}else toast(j.error||'Failed');}
-async function exportPayouts(){
+async function payoutsView(){
+  const box=$('#body');box.innerHTML='<div class="empty">Loading PH payouts…</div>';
+  const j=await api('adminListPayouts');
+  if(!j.ok){box.innerHTML='<div class="empty">'+(j.error||'Failed to load')+'</div>';return;}
+  const rows=j.rows||[]; window.__payoutRows=rows;
+  let html=`<div class="row" style="justify-content:space-between;align-items:center;margin:2px 0 12px">
+    <p class="muted" style="font-size:14px;margin:0">Philippines · Wise payouts · <b style="color:#fff">${rows.length}</b> registered</p>
+    <div class="row"><button class="btn ghost sm" onclick="clientsView()">← Back</button><button class="btn sm" onclick="savePayoutsAndExport()">Save &amp; download CSV</button></div></div>`;
+  if(!rows.length){box.innerHTML=html+'<div class="empty">No PH candidates have registered Wise details yet.</div>';return;}
+  html+=`<p class="muted" style="font-size:13px;margin:0 0 10px">Set or adjust each monthly amount (plain number, GBP — no commas or £). Where a Work Order salary exists you can pull it in with one click.</p>
+    <div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:14px">
+    <tr style="text-align:left"><th style="padding:9px 12px;border-bottom:1px solid #272c37;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9a">Name</th><th style="padding:9px 12px;border-bottom:1px solid #272c37;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9a">Target</th><th style="padding:9px 12px;border-bottom:1px solid #272c37;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9a">Amount (GBP)</th></tr>`;
+  html+=rows.map((r,i)=>`<tr>
+    <td style="padding:8px 12px;border-bottom:1px solid #1a1f29"><b>${esc(r.name)}</b><div class="muted" style="font-size:12px">${esc(r.company||'')}${r.email?' · '+esc(r.email):''}</div></td>
+    <td style="padding:8px 12px;border-bottom:1px solid #1a1f29">${esc(r.targetCurrency||'PHP')}</td>
+    <td style="padding:8px 12px;border-bottom:1px solid #1a1f29"><input id="pa_${i}" value="${esc(r.amount||'')}" placeholder="0.00" style="width:110px;display:inline-block">${r.woSalary?` <button class="btn ghost sm" style="padding:4px 8px" onclick="document.getElementById('pa_${i}').value='${r.woSalary}'">Use WO £${r.woSalary}</button>`:''}</td>
+  </tr>`).join('');
+  html+='</table></div>';
+  box.innerHTML=html;
+}
+async function savePayoutsAndExport(){
+  const rows=window.__payoutRows||[];
+  for(let i=0;i<rows.length;i++){
+    const inp=document.getElementById('pa_'+i); if(!inp)continue;
+    const v=inp.value.trim();
+    if(v!==(rows[i].amount||'')){const j=await api('adminSetPayoutAmount',{wsId:rows[i].wsId,candidateId:rows[i].candidateId,amount:v});if(!j.ok){toast((j.error||'Save failed')+' — '+rows[i].name);return;}rows[i].amount=v;}
+  }
   const j=await api('adminExportPayouts');
   if(!j.ok){toast(j.error||'Export failed');return;}
-  const rows=j.rows||[];
-  if(!rows.length){toast('No PH candidates have registered Wise details yet');return;}
+  const erows=j.rows||[];
+  if(!erows.length){toast('Nothing to export');return;}
   const cols=['recipientId','name','recipientEmail','recipientDetail','sourceCurrency','targetCurrency','amountCurrency','amount','paymentReference','receiverType'];
   const q=v=>{v=String(v==null?'':v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
-  const csv=[cols.join(',')].concat(rows.map(r=>cols.map(k=>q(r[k])).join(','))).join('\n');
+  const csv=[cols.join(',')].concat(erows.map(r=>cols.map(k=>q(r[k])).join(','))).join('\n');
   const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='wise-ph-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
-  toast('Exported '+rows.length+' PH payout'+(rows.length===1?'':'s'));
+  toast('Saved & exported '+erows.length+' PH payout'+(erows.length===1?'':'s'));
 }
 function kanbanCard(c){
   return `<div class="card" style="padding:12px;margin-bottom:10px;cursor:pointer;position:relative" onclick="openClient('${c.id}')">
