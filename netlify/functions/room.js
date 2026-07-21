@@ -328,6 +328,60 @@ exports.handler = async (event) => {
       return json(200, { ok: true });
     }
 
+    // ---- Offer → Work Order → Equipment ----
+    if (action === 'roomRaiseWO') {
+      if (!(await isAdmin())) return json(403, { error: 'admin only' });
+      const r = await load(String(b.roomId || '')); if (!r) return json(404, { error: 'room not found' });
+      const c = (r.candidates || []).find(x => x.id === String(b.candidateId || '')); if (!c) return json(404, { error: 'candidate not found' });
+      const wo = b.wo || {};
+      c.workOrder = {
+        status: 'awaiting_client', raisedAt: now(),
+        jobTitle: String(wo.jobTitle || c.headline || r.role || ''), startDate: String(wo.startDate || ''),
+        grossSalaryMonthly: Number(wo.grossSalaryMonthly || c.salary || 0), noticePeriod: String(wo.noticePeriod || '1 calendar month'),
+        annualLeaveDays: Number(wo.annualLeaveDays || 15), sickLeaveDays: Number(wo.sickLeaveDays || 12),
+        jobDescription: String(wo.jobDescription || ''), tmcNote: String(wo.tmcNote || ''), signed: null, untappedSigned: null
+      };
+      r.activity = r.activity || []; r.activity.unshift({ ts: now(), who: 'Untapped', text: `Work Order raised for ${c.name} — awaiting client signature` });
+      await save(r);
+      await mail([...TEAM], `Room · ${r.client.name} — WO raised for ${c.name}`, emailWrap('Work Order raised', `<p style="font-size:15px;color:#333">Work Order raised for <b>${esc(c.name)}</b> — awaiting client signature in the room.</p>`, roomLink(r.id)));
+      await slack(`:memo: *${r.client.name}* room — Work Order raised for ${c.name} (awaiting client signature)  <${roomLink(r.id)}|open>`, r.region);
+      return json(200, { ok: true, room: pub(r) });
+    }
+    if (action === 'roomSignWO') {
+      const r = await load(String(b.roomId || '')); if (!r) return json(404, { error: 'room not found' });
+      const c = (r.candidates || []).find(x => x.id === String(b.candidateId || '')); if (!c || !c.workOrder) return json(404, { error: 'no work order' });
+      const name = String(b.name || '').trim(); if (name.length < 2) return json(400, { error: 'enter your full name' });
+      c.workOrder.signed = { name, company: b.company || {}, ts: now() }; c.workOrder.status = 'signed';
+      c.stage = 'hired'; c.decision = 'Hired';
+      const who = String(b.viewer || (r.client && r.client.contactName) || 'Client');
+      r.activity = r.activity || []; r.activity.unshift({ ts: now(), who, text: `${who} signed the Work Order for ${c.name} — Hired` });
+      await save(r);
+      await mail([...TEAM], `Room · ${r.client.name} — WO SIGNED for ${c.name}`, emailWrap('Work Order signed', `<p style="font-size:15px;color:#333"><b>${esc(c.name)}</b>'s Work Order was signed by ${esc(name)}. Candidate is now <b>Hired</b> — complete the equipment sheet next.</p>`, roomLink(r.id)));
+      await slack(`:white_check_mark: *${r.client.name}* room — Work Order SIGNED for ${c.name} → Hired  <${roomLink(r.id)}|open>`, r.region);
+      return json(200, { ok: true, room: pub(r) });
+    }
+    if (action === 'roomEquipment') {
+      const r = await load(String(b.roomId || '')); if (!r) return json(404, { error: 'room not found' });
+      const c = (r.candidates || []).find(x => x.id === String(b.candidateId || '')); if (!c) return json(404, { error: 'candidate not found' });
+      const choice = b.choice || {};
+      c.equipment = { tier: String(choice.tier || ''), tierName: String(choice.tierName || ''), option: String(choice.option || ''), deliveryName: String(choice.deliveryName || ''), deliveryAddress: String(choice.deliveryAddress || '').slice(0, 400), notes: String(choice.notes || '').slice(0, 600), ts: now() };
+      const eqSummary = `${c.equipment.tierName || c.equipment.tier}${c.equipment.option ? ' · ' + c.equipment.option : ''}`;
+      const who = String(b.viewer || (r.client && r.client.contactName) || 'Client');
+      r.activity = r.activity || []; r.activity.unshift({ ts: now(), who, text: `${who} submitted the equipment sheet for ${c.name} (${eqSummary})` });
+      await save(r);
+      await mail([...TEAM], `Room · ${r.client.name} — equipment for ${c.name}`, emailWrap('Equipment sheet submitted', `<p style="font-size:15px;color:#333">Equipment for <b>${esc(c.name)}</b>: ${esc(eqSummary)}<br>Deliver to: ${esc(c.equipment.deliveryName)}<br>${esc(c.equipment.deliveryAddress)}${c.equipment.notes ? '<br>Notes: ' + esc(c.equipment.notes) : ''}</p>`, roomLink(r.id)));
+      await slack(`:desktop_computer: *${r.client.name}* room — equipment for ${c.name}: ${eqSummary}  <${roomLink(r.id)}|open>`, r.region);
+      return json(200, { ok: true, room: pub(r) });
+    }
+    if (action === 'roomCountersignWO') {
+      if (!(await isAdmin())) return json(403, { error: 'admin only' });
+      const r = await load(String(b.roomId || '')); if (!r) return json(404, { error: 'room not found' });
+      const c = (r.candidates || []).find(x => x.id === String(b.candidateId || '')); if (!c || !c.workOrder) return json(404, { error: 'no work order' });
+      c.workOrder.untappedSigned = { name: String(b.name || '').slice(0, 80), title: String(b.title || 'CEO').slice(0, 80), ts: now() };
+      await save(r);
+      return json(200, { ok: true, room: pub(r) });
+    }
+
     return json(400, { error: 'unknown action' });
   } catch (e) {
     return json(500, { error: e.message });
