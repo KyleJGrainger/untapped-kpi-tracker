@@ -242,6 +242,28 @@ exports.handler = async (event) => {
     clients.sort((a, b2) => String(b2.sentAt || '').localeCompare(String(a.sentAt || '')));
     return json(200, { ok: true, clients });
   }
+  // Export PH candidates' Wise payout rows in the EXACT Wise CSV column order.
+  if (action === 'adminExportPayouts') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const { blobs } = await store.list();
+    const rows = [];
+    for (const bl of blobs) {
+      if (bl.key === '__config' || bl.key.includes(':')) continue;
+      const w = await store.get(bl.key, { type: 'json' }); if (!w) continue;
+      for (const c of (w.candidates || [])) {
+        if (c.location === 'Philippines' && c.payout) {
+          rows.push({
+            recipientId: '', name: c.payout.name || c.name || '', recipientEmail: c.payout.email || '',
+            recipientDetail: '', sourceCurrency: c.payout.sourceCurrency || 'GBP', targetCurrency: c.payout.targetCurrency || 'PHP',
+            amountCurrency: c.payout.amountCurrency || 'source', amount: c.payout.amount || '', paymentReference: '', receiverType: 'PERSON',
+            company: w.company || '', registeredAt: c.payout.registeredAt || null
+          });
+        }
+      }
+    }
+    rows.sort((a, b2) => String(a.name).localeCompare(String(b2.name)));
+    return json(200, { ok: true, rows });
+  }
   if (action === 'adminCreateClient') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     if (!String(b.company || '').trim()) return json(400, { error: 'company name required' });
@@ -735,6 +757,32 @@ exports.handler = async (event) => {
   }
   if (action === 'resolveBlocker') {
     const bl = (c.blockers || []).find(x => x.id === b.blockerId); if (bl) bl.resolved = true; await save(); return json(200, { ok: true });
+  }
+  // PH payroll: candidate registers their Wise payout details (first-login gate). Locked fields: source=GBP, amountCurrency=source.
+  if (action === 'savePayout') {
+    if (role !== 'candidate') return json(403, { error: 'forbidden' });
+    const name = String(b.name || '').trim();
+    const email = String(b.email || '').trim();
+    const target = String(b.targetCurrency || '').toUpperCase();
+    const amountRaw = String(b.amount == null ? '' : b.amount).trim();
+    if (name.length < 2) return json(400, { error: 'Enter your full name (must match your Wise account).' });
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json(400, { error: 'Enter a valid email.' });
+    if (!['PHP', 'GBP'].includes(target)) return json(400, { error: 'Choose a target currency.' });
+    if (!/^\d+(\.\d{1,2})?$/.test(amountRaw)) return json(400, { error: 'Amount must be a plain number — no commas, no £ (e.g. 1502.10).' });
+    c.payout = { name, email, sourceCurrency: 'GBP', targetCurrency: target, amountCurrency: 'source', amount: amountRaw, receiverType: 'PERSON', registeredAt: new Date().toISOString() };
+    c.lastActivity = new Date().toISOString(); await save();
+    const body = `<p style="font-size:15px;color:#333;margin:0 0 12px"><b>${esc(name)}</b> has registered their Wise payment details.</p>
+      <table style="border-collapse:collapse;font-size:14px;margin:0 0 8px">
+      <tr><td style="padding:4px 16px 4px 0;color:#777">Name</td><td style="padding:4px 0">${esc(name)}</td></tr>
+      <tr><td style="padding:4px 16px 4px 0;color:#777">Email</td><td style="padding:4px 0">${esc(email)}</td></tr>
+      <tr><td style="padding:4px 16px 4px 0;color:#777">Source currency</td><td style="padding:4px 0">GBP</td></tr>
+      <tr><td style="padding:4px 16px 4px 0;color:#777">Target currency</td><td style="padding:4px 0">${esc(target)}</td></tr>
+      <tr><td style="padding:4px 16px 4px 0;color:#777">Amount currency</td><td style="padding:4px 0">source</td></tr>
+      <tr><td style="padding:4px 16px 4px 0;color:#777">Amount</td><td style="padding:4px 0">${esc(amountRaw)}</td></tr>
+      </table>
+      <p style="color:#777;font-size:13px">Company: ${esc(ws.company || '—')}</p>`;
+    await mail(['Nina@tryuntapped.com', 'finance@createandadapt.com'], `Wise details registered — ${name} (${ws.company || 'Untapped'})`, emailWrap('Wise payment details', body, ws, reqBase));
+    return json(200, { ok: true });
   }
   if (action === 'submitTimeoff') {
     if (role !== 'candidate') return json(403, { error: 'only candidate submits' });
