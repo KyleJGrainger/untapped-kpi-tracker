@@ -125,8 +125,8 @@ exports.handler = async (event) => {
   async function load(id) {
     let r = await store.get(key(id), { type: 'json' });
     if (!r && id === SEED.id) r = JSON.parse(JSON.stringify(SEED)); // pilot fallback
-    if (!r && id === DEMO_SEED.id) { r = JSON.parse(JSON.stringify(DEMO_SEED)); r.candidates.forEach(c => c.hasCV = true); } // demo fallback: CVs available
-    if (!r && id === 'demo-co-ph') { r = JSON.parse(JSON.stringify(DEMO_SEED)); r.id = 'demo-co-ph'; r.region = 'Philippines'; r.client = { name: 'Demo Co PH', contactName: 'Sam Client' }; r.candidates.forEach(c => c.hasCV = true); } // PH-region demo (routes to PH channel)
+    if (!r && id === DEMO_SEED.id) { r = JSON.parse(JSON.stringify(DEMO_SEED)); r.candidates.forEach(c => { c.hasCV = true; c.salary = Math.round((c.cost - 325) / 1.25); }); } // demo fallback: CVs + salary for cost breakdown
+    if (!r && id === 'demo-co-ph') { r = JSON.parse(JSON.stringify(DEMO_SEED)); r.id = 'demo-co-ph'; r.region = 'Philippines'; r.client = { name: 'Demo Co PH', contactName: 'Sam Client' }; r.candidates.forEach(c => { c.hasCV = true; c.salary = Math.round((c.cost - 150) / 1.35); }); } // PH-region demo
     return r;
   }
   const save = (r) => store.setJSON(key(r.id), r);
@@ -194,16 +194,24 @@ exports.handler = async (event) => {
         c.decision = label;
         if (/interview/i.test(label)) c.stage = /2nd|second/i.test(label) ? 'second' : 'interview';
         if (/offer/i.test(label)) c.stage = 'offer';
-        if (/pass|reject|not for us/i.test(label)) c.decision = 'Passed';
-        text = `${who}: ${label} — ${c.name}`;
+        if (/pass|reject|not for us/i.test(label)) {
+          c.decision = 'Passed';
+          const reason = String(b.reason || '').slice(0, 120);
+          const note = String(b.note || '').slice(0, 600);
+          c.declineReason = { reason, note, stage: c.stage, ts: now() };
+          text = `${who} declined ${c.name}${reason ? ' — ' + reason : ''}${note ? ' (“' + note + '”)' : ''}`;
+        } else {
+          text = `${who}: ${label} — ${c.name}`;
+        }
       }
       r.activity = r.activity || [];
       r.activity.unshift({ ts: now(), who, text });
       r.activity = r.activity.slice(0, 200);
       await save(r);
-      const body = `<p style="font-size:15px;color:#333">${esc(text)}</p><p style="color:#777;font-size:13px">Room: ${esc(r.role)} · ${esc(r.client.name)}. Update Atlas to match.</p>`;
+      const cc = [r.owner, c.owner].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(', ');
+      const body = `<p style="font-size:15px;color:#333">${esc(text)}</p><p style="color:#777;font-size:13px">Room: ${esc(r.role)} · ${esc(r.client.name)}${cc ? ' · for: ' + esc(cc) : ''}. Update Atlas to match.</p>`;
       await mail([...TEAM], `Room · ${r.client.name} — ${text}`, emailWrap('Client activity', body, roomLink(r.id)));
-      await slack(`:busts_in_silhouette: *${r.client.name}* room — ${text}  <${roomLink(r.id)}|open>`, r.region);
+      await slack(`:busts_in_silhouette: *${r.client.name}* room — ${text}${cc ? '  ·  cc: ' + cc : ''}  <${roomLink(r.id)}|open>`, r.region);
       return json(200, { ok: true, room: pub(r) });
     }
 
@@ -214,18 +222,22 @@ exports.handler = async (event) => {
       const bodyText = String(b.body || '').trim();
       if (!bodyText) return json(400, { error: 'empty' });
       r.chat = r.chat || [];
-      const msg = { id: uid(), who, side: b.side === 'Untapped' ? 'Untapped' : 'Client', ts: now(), body: bodyText, replies: [] };
+      // feedback tied to a specific candidate (shows on the candidate + grouped in the thread)
+      const candId = b.candidateId ? String(b.candidateId) : null;
+      const cand = candId ? (r.candidates || []).find(x => x.id === candId) : null;
+      const candName = cand ? cand.name : (b.candidateName ? String(b.candidateName) : null);
+      const msg = { id: uid(), who, side: b.side === 'Untapped' ? 'Untapped' : 'Client', ts: now(), body: bodyText, replies: [], candidateId: candId, candidateName: candName };
       if (b.parentId) {
         const parent = r.chat.find(m => m.id === String(b.parentId));
         if (parent) { parent.replies = parent.replies || []; parent.replies.push(msg); }
         else r.chat.push(msg);
       } else r.chat.push(msg);
       r.activity = r.activity || [];
-      r.activity.unshift({ ts: now(), who, text: `${who} commented in discussion` });
+      r.activity.unshift({ ts: now(), who, text: candName ? `${who} left feedback on ${candName}` : `${who} commented in discussion` });
       await save(r);
-      const eb = `<p style="font-size:15px;color:#333"><b>${esc(who)}</b> commented:</p><p style="color:#333">${esc(bodyText)}</p>`;
-      await mail([...TEAM], `Room · ${r.client.name} — new comment`, emailWrap('New comment', eb, roomLink(r.id)));
-      await slack(`:speech_balloon: *${r.client.name}* room — ${who}: ${bodyText}  <${roomLink(r.id)}|open>`, r.region);
+      const eb = `<p style="font-size:15px;color:#333"><b>${esc(who)}</b>${candName ? ' on <b>' + esc(candName) + '</b>' : ''} commented:</p><p style="color:#333">${esc(bodyText)}</p>`;
+      await mail([...TEAM], `Room · ${r.client.name} — ${candName ? 'feedback on ' + candName : 'new comment'}`, emailWrap('New comment', eb, roomLink(r.id)));
+      await slack(`:speech_balloon: *${r.client.name}* room — ${who}${candName ? ' on ' + candName : ''}: ${bodyText}  <${roomLink(r.id)}|open>`, r.region);
       return json(200, { ok: true, room: pub(r) });
     }
 
