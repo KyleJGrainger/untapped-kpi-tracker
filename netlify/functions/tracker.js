@@ -253,7 +253,7 @@ exports.handler = async (event) => {
       for (const c of (w.candidates || [])) {
         if (c.location === 'Philippines' && c.payout) {
           rows.push({
-            recipientId: '', name: c.payout.name || c.name || '', recipientEmail: c.payout.email || '',
+            recipientId: c.payout.recipientId || '', name: c.payout.name || c.name || '', recipientEmail: c.payout.email || '',
             recipientDetail: '', sourceCurrency: c.payout.sourceCurrency || 'GBP', targetCurrency: c.payout.targetCurrency || 'PHP',
             amountCurrency: c.payout.amountCurrency || 'source', amount: c.payout.amount || '', paymentReference: '', receiverType: 'PERSON',
             company: w.company || '', registeredAt: c.payout.registeredAt || null
@@ -276,21 +276,25 @@ exports.handler = async (event) => {
       const woSalary = wo && Number(wo.grossSalaryMonthly) ? Number(wo.grossSalaryMonthly) : null;
       for (const c of (w.candidates || [])) {
         if (c.location === 'Philippines' && c.payout) {
-          rows.push({ wsId: w.id, candidateId: c.id, name: c.payout.name || c.name || '', email: c.payout.email || '', targetCurrency: c.payout.targetCurrency || 'PHP', amount: c.payout.amount || '', woSalary, company: w.company || '' });
+          rows.push({ wsId: w.id, candidateId: c.id, name: c.payout.name || c.name || '', email: c.payout.email || '', targetCurrency: c.payout.targetCurrency || 'PHP', amount: c.payout.amount || '', recipientId: c.payout.recipientId || '', woSalary, company: w.company || '' });
         }
       }
     }
     rows.sort((a, b2) => String(a.name).localeCompare(String(b2.name)));
     return json(200, { ok: true, rows });
   }
-  // Admin sets/edits a PH candidate's Wise payout amount (plain number; blank allowed).
+  // Admin sets/edits a PH candidate's Wise payout amount (plain number; blank allowed) and/or Wise recipient ID.
   if (action === 'adminSetPayoutAmount') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'client not found' });
     const c = (w.candidates || []).find(x => x.id === b.candidateId); if (!c || !c.payout) return json(404, { error: 'candidate/payout not found' });
-    const amt = String(b.amount == null ? '' : b.amount).trim();
-    if (amt !== '' && !/^\d+(\.\d{1,2})?$/.test(amt)) return json(400, { error: 'Amount must be a plain number — no commas, no £.' });
-    c.payout.amount = amt; await store.setJSON(b.wsId, w);
+    if (b.amount != null) {
+      const amt = String(b.amount).trim();
+      if (amt !== '' && !/^\d+(\.\d{1,2})?$/.test(amt)) return json(400, { error: 'Amount must be a plain number — no commas, no £.' });
+      c.payout.amount = amt;
+    }
+    if (b.recipientId != null) c.payout.recipientId = String(b.recipientId).trim().slice(0, 100);
+    await store.setJSON(b.wsId, w);
     return json(200, { ok: true });
   }
   if (action === 'adminCreateClient') {
