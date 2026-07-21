@@ -332,9 +332,15 @@ async function roomsView(){
   html+= rooms.length? rooms.map(r=>`<div class="card" style="padding:12px;margin-bottom:10px"><div class="row" style="justify-content:space-between;align-items:center">
       <div><b style="font-size:14px">${esc(r.client||'—')}</b> <span class="muted">· ${esc(r.role||'')}</span>
       <div class="muted" style="font-size:12px;margin-top:3px">${r.candidates||0} candidates · ${r.viewers||0} viewer(s) · ${r.syncedAt?('synced '+new Date(r.syncedAt).toLocaleDateString('en-GB')):'not synced'}</div></div>
-      <div class="row"><button class="btn ghost sm" onclick="copy(location.origin+'/room.html?r='+encodeURIComponent('${r.id}'))">Copy link</button><button class="btn sm" onclick="openRoom('${r.id}')">Open</button></div>
+      <div class="row"><button class="btn ghost sm" onclick="copy(location.origin+'/room.html?r='+encodeURIComponent('${r.id}'))">Copy link</button><button class="btn sm" onclick="openRoom('${r.id}')">Open</button><button class="btn ghost sm" style="border-color:#DA291C;color:#ff8a80" onclick="deleteRoom('${r.id}','${esc(r.client||'').replace(/'/g,'')}')">Delete</button></div>
     </div></div>`).join('') : '<div class="empty">No rooms yet. Use “Atlas Sync (import)” to create one from the morning Atlas pull.</div>';
   box.innerHTML=html;
+}
+async function deleteRoom(id,name){
+  if(!confirm('Delete the room for '+(name||id)+'?\n\nThis permanently removes the client’s room, its Kanban, chat, engagement history and uploaded CVs. This cannot be undone.'))return;
+  const j=await roomApi('roomDelete',{roomId:id});
+  toast(j.ok?'Room deleted':(j.error||'Delete failed'));
+  if(j.ok)roomsView();
 }
 function roomSyncPanel(){
   $('#roomsync').innerHTML=`<div class="panel" style="margin-bottom:12px"><h3 style="margin:0 0 6px">Atlas Sync — import room data</h3>
