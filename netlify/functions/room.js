@@ -382,6 +382,14 @@ exports.handler = async (event) => {
       return json(200, { ok: true, room: pub(r) });
     }
 
+    if (action === 'roomDelete') {
+      if (!(await isAdmin())) return json(403, { error: 'admin only' });
+      const id = String(b.roomId || ''); if (!id) return json(400, { error: 'room id required' });
+      await store.delete(key(id));
+      try { const it = await store.list({ prefix: 'cv:' + id + ':' }); for (const bl of (it.blobs || [])) await store.delete(bl.key); } catch (e) {}
+      return json(200, { ok: true });
+    }
+
     return json(400, { error: 'unknown action' });
   } catch (e) {
     return json(500, { error: e.message });
