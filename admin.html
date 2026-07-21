@@ -368,16 +368,36 @@ async function openRoom(id){
   } else html+='<p class="muted" style="font-size:13px;margin:0">No client has entered the room yet.</p>';
   html+=`</div><div class="panel"><h3 style="margin:0 0 8px">Candidate documents</h3>
     <p class="muted" style="font-size:13px;margin:0 0 8px">Upload a CV (PDF) and photo per candidate — these aren't in Atlas.</p>`;
-  html+= (room.candidates||[]).map(c=>`<div class="row" style="justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:10px 0">
-      <div><b>${esc(c.name)}</b> <span class="muted" style="font-size:12px">${c.hasCV?'· CV ✓':'· no CV'}${c.photo?' · photo ✓':''}</span></div>
-      <div class="row"><label class="btn ghost sm" style="cursor:pointer">CV<input type="file" accept="application/pdf" style="display:none" onchange="roomUploadCV('${id}','${c.id}',this)"></label>
-      <label class="btn ghost sm" style="cursor:pointer">Photo<input type="file" accept="image/*" style="display:none" onchange="roomUploadPhoto('${id}','${c.id}',this)"></label></div>
-    </div>`).join('')||'<p class="muted" style="font-size:13px">No candidates in this room.</p>';
+  html+= (room.candidates||[]).map(c=>{
+    const w=c.workOrder; let woLine='';
+    if(c.equipment){ woLine=`<div class="muted" style="font-size:12px;margin-top:6px;color:#7ee2a0">✓ Hired · WO ${w&&w.untappedSigned?'counter-signed':'signed'} · Equipment: ${esc(c.equipment.tierName||'—')}${c.equipment.option?' ('+esc(c.equipment.option)+')':''} → ${esc(c.equipment.deliveryName||'')} ${esc(c.equipment.deliveryAddress||'')}</div>`; }
+    else if(w&&w.signed){ woLine=`<div class="row" style="justify-content:space-between;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">WO signed by ${esc((w.signed.name)||'client')} · awaiting equipment sheet${w.untappedSigned?' · counter-signed ✓':''}</span>${w.untappedSigned?'':`<button class="btn ghost sm" onclick="countersignRoomWO('${id}','${c.id}')">Counter-sign WO</button>`}</div>`; }
+    else if(w){ woLine=`<div class="muted" style="font-size:12px;margin-top:6px;color:#ffb27a">WO raised · awaiting client signature</div>`; }
+    else if(c.stage==='offer'){ woLine=`<div style="margin-top:6px"><button class="btn sm" onclick="raiseWOForm('${id}','${c.id}')">Raise Work Order</button></div><div id="woform_${c.id}"></div>`; }
+    return `<div style="border-bottom:1px solid var(--line);padding:10px 0">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><b>${esc(c.name)}</b> <span class="muted" style="font-size:12px">${c.hasCV?'· CV ✓':'· no CV'}${c.photo?' · photo ✓':''} · ${esc((room.stages.find(s=>s.id===c.stage)||{}).label||c.stage)}</span></div>
+        <div class="row"><label class="btn ghost sm" style="cursor:pointer">CV<input type="file" accept="application/pdf" style="display:none" onchange="roomUploadCV('${id}','${c.id}',this)"></label>
+        <label class="btn ghost sm" style="cursor:pointer">Photo<input type="file" accept="image/*" style="display:none" onchange="roomUploadPhoto('${id}','${c.id}',this)"></label></div>
+      </div>${woLine}</div>`;
+  }).join('')||'<p class="muted" style="font-size:13px">No candidates in this room.</p>';
   html+=`</div>`;
   box.innerHTML=html;
 }
 function roomUploadCV(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>6*1024*1024){toast('Max 6MB');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading CV…');const j=await roomApi('roomUploadCV',{roomId:id,candidateId:cid,dataBase64:String(r.result)});toast(j.ok?'CV uploaded':(j.error||'Upload failed'));if(j.ok)openRoom(id);};r.readAsDataURL(f);}
 function roomUploadPhoto(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>2*1024*1024){toast('Max 2MB');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading photo…');const j=await roomApi('roomUploadPhoto',{roomId:id,candidateId:cid,photo:String(r.result)});toast(j.ok?'Photo uploaded':(j.error||'Upload failed'));if(j.ok)openRoom(id);};r.readAsDataURL(f);}
+function raiseWOForm(id,cid){const el=document.getElementById('woform_'+cid);if(!el)return;
+  el.innerHTML=`<div class="card" style="margin-top:8px">
+    <div class="lbl" style="color:#FFC600">RAISE WORK ORDER</div>
+    <div class="grid2"><div><label class="fl">Job title</label><input id="wo_jt_${cid}"></div><div><label class="fl">Start date</label><input id="wo_sd_${cid}" type="date"></div></div>
+    <div class="grid2"><div><label class="fl">Gross salary (£/mo)</label><input id="wo_gs_${cid}" type="number" min="0" step="50"></div><div><label class="fl">Notice period</label><input id="wo_np_${cid}" value="1 calendar month"></div></div>
+    <label class="fl">TMC / comp agreement</label><input id="wo_tmc_${cid}" placeholder="e.g. base + commission structure">
+    <label class="fl">Job description</label><textarea id="wo_jd_${cid}" style="width:100%;height:60px;background:#0d0f14;color:#cdd6df;border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn sm" onclick="submitRaiseWO('${id}','${cid}')">Raise &amp; send to client</button><button class="btn ghost sm" onclick="document.getElementById('woform_${cid}').innerHTML=''">Cancel</button></div>
+  </div>`;
+}
+async function submitRaiseWO(id,cid){const g=x=>{const e=document.getElementById(x);return e?e.value:'';};const wo={jobTitle:g('wo_jt_'+cid),startDate:g('wo_sd_'+cid),grossSalaryMonthly:g('wo_gs_'+cid),noticePeriod:g('wo_np_'+cid),tmcNote:g('wo_tmc_'+cid),jobDescription:g('wo_jd_'+cid)};const j=await roomApi('roomRaiseWO',{roomId:id,candidateId:cid,wo});toast(j.ok?'Work Order raised — client can now sign':(j.error||'Failed'));if(j.ok)openRoom(id);}
+async function countersignRoomWO(id,cid){const name=prompt('Counter-sign the Work Order as Untapped. Your name:','Kyle Grainger');if(!name)return;const title=prompt('Your title:','CEO')||'CEO';const j=await roomApi('roomCountersignWO',{roomId:id,candidateId:cid,name,title});toast(j.ok?'WO counter-signed':(j.error||'Failed'));if(j.ok)openRoom(id);}
 function uploadCV(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>6*1024*1024){toast('File too big (max 6MB)');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading…');const j=await api('adminUploadCV',{wsId:id,candidateId:cid,dataBase64:String(r.result)});if(j.ok){toast('CV uploaded');openClient(id);}else toast(j.error||'Upload failed');};r.readAsDataURL(f);}
 
 let cmode='new';

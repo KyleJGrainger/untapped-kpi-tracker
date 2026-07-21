@@ -218,6 +218,7 @@ function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return
       <button class="btn sm ghost" style="border-color:#5a2b28;color:#e88" onclick="declineUI('${c.id}')">Not for us</button>
     </div>
     <div id="declinebox"></div>
+    ${woHtml(c)}
     ${costRows}
     <div class="kv"><span class="k">Rec-Niche</span><span>${(c.niche||[]).join(', ')||'—'}</span></div>
     <div class="kv"><span class="k">Rec-Scope</span><span>${(c.scope||[]).join(', ')||'—'}</span></div>
@@ -237,6 +238,60 @@ function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return
 }
 function closeD(){document.getElementById('scrim').classList.remove('open');document.getElementById('drawer').classList.remove('open');}
 function downloadCv(id){const url='/.netlify/functions/cv?w='+encodeURIComponent(ROOM_ID)+'&c='+encodeURIComponent(id);window.open(url,'_blank');toast('Opening CV…');api('roomCvDownload',{candidateId:id,viewer:VIEWER.name});}
+const EQUIP_TIERS=[
+ {id:'entry',name:'Entry',roles:'Admin, Customer Service, Operations',ex:'Lenovo IdeaPad / Dell Essential (i5, 16GB)',lease:'£80/mo',buy:'£600–£870'},
+ {id:'professional',name:'Professional',roles:'Developer, Analyst, Office Professional',ex:'Dell Vostro / ThinkPad E-Series, MacBook Air',lease:'£100/mo',buy:'£870–£1,300'},
+ {id:'premium',name:'Premium',roles:'Exec, Engineer, Senior Management',ex:'Dell XPS / ThinkPad (Core Ultra 7), MacBook Pro',lease:'£120–£170/mo',buy:'£1,300–£2,170'}
+];
+function woHtml(c){const w=c.workOrder;
+  if(w && !w.signed){const mc=w.grossSalaryMonthly?Math.round(ROOM.region==='Philippines'?w.grossSalaryMonthly*1.35+150:w.grossSalaryMonthly*1.25+325):c.cost;
+    return `<div class="card" style="margin:14px 0;border-color:var(--gold)">
+      <div class="lbl" style="color:var(--gold)">WORK ORDER — REVIEW &amp; SIGN</div><div class="rule"></div>
+      <div class="kv"><span class="k">Role</span><span>${esc(w.jobTitle)}</span></div>
+      <div class="kv"><span class="k">Start date</span><span>${esc(w.startDate||'TBC')}</span></div>
+      <div class="kv"><span class="k">Monthly cost (all-in)</span><span style="color:var(--gold);font-weight:700">${money(mc)}/mo</span></div>
+      <div class="kv"><span class="k">Notice period</span><span>${esc(w.noticePeriod)}</span></div>
+      <div class="kv"><span class="k">Annual leave</span><span>${w.annualLeaveDays} days</span></div>
+      ${w.tmcNote?`<div class="kv"><span class="k">Terms</span><span style="text-align:right;max-width:220px">${esc(w.tmcNote)}</span></div>`:''}
+      ${w.jobDescription?`<div style="font-size:12.5px;color:#cdd6df;margin-top:8px">${esc(w.jobDescription)}</div>`:''}
+      <label class="muted" style="font-size:11.5px;display:block;margin-top:10px">Your company name</label><input id="wo_co" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;margin-top:4px" placeholder="Company Ltd">
+      <label class="muted" style="font-size:11.5px;display:block;margin-top:8px">Registration number</label><input id="wo_reg" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;margin-top:4px">
+      <label class="muted" style="font-size:11.5px;display:block;margin-top:8px">Your full name (signature)</label><input id="wo_sig" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;margin-top:4px">
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;font-size:12px;color:#cdd6df"><input type="checkbox" id="wo_agree" style="width:auto;margin-top:2px">I agree to the Work Order terms above.</label>
+      <div id="wo_err" style="color:#e88;font-size:12px;margin-top:6px"></div>
+      <button class="btn" style="width:100%;margin-top:10px" onclick="signWO('${c.id}')">Sign Work Order →</button>
+    </div>`;
+  }
+  if(w && w.signed && !c.equipment){
+    return `<div class="card" style="margin:14px 0;border-color:var(--gold)">
+      <div class="lbl" style="color:var(--gold)">EQUIPMENT SHEET</div><div class="rule"></div>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px">Work Order signed ✓ — a managed device, sourced, configured &amp; delivered by Untapped and supported by a local technician (NBD loan unit during repairs). Choose a tier and how to acquire it.</p>
+      <div style="font-size:11.5px;color:#aab4bf;letter-spacing:.5px;margin-bottom:4px">DEVICE TIER</div>
+      <div id="eq_tiers">${EQUIP_TIERS.map((t,i)=>`<label style="display:flex;gap:8px;align-items:flex-start;padding:8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;font-size:12.5px;cursor:pointer"><input type="radio" name="eqtier" value="${t.id}" data-name="${esc(t.name)}" ${i===0?'checked':''} style="width:auto;margin-top:3px"><span><b>${esc(t.name)}</b> <span class="muted">· ${esc(t.roles)}</span><br><span class="muted" style="font-size:11.5px">${esc(t.ex)}</span><br><span style="color:var(--gold)">Lease ${esc(t.lease)}</span> <span class="muted">· Buy ${esc(t.buy)}</span></span></label>`).join('')}</div>
+      <div style="font-size:11.5px;color:#aab4bf;letter-spacing:.5px;margin:8px 0 4px">HOW TO ACQUIRE</div>
+      <div id="eq_option" style="display:flex;gap:8px">
+        <label style="flex:1;display:flex;gap:6px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;cursor:pointer"><input type="radio" name="eqopt" value="Lease (managed)" checked style="width:auto">Lease <span class="muted">· managed</span></label>
+        <label style="flex:1;display:flex;gap:6px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;cursor:pointer"><input type="radio" name="eqopt" value="Purchase" style="width:auto">Purchase</label>
+      </div>
+      <label class="muted" style="font-size:11.5px;display:block;margin-top:8px">Deliver to (name)</label><input id="eq_name" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;margin-top:4px">
+      <label class="muted" style="font-size:11.5px;display:block;margin-top:8px">Delivery address</label><textarea id="eq_addr" style="width:100%;height:56px;background:var(--panel2);border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;margin-top:4px"></textarea>
+      <label class="muted" style="font-size:11.5px;display:block;margin-top:8px">Notes (optional)</label><input id="eq_notes" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;margin-top:4px">
+      <div id="eq_err" style="color:#e88;font-size:12px;margin-top:6px"></div>
+      <button class="btn" style="width:100%;margin-top:10px" onclick="submitEquipment('${c.id}')">Submit equipment sheet →</button>
+    </div>`;
+  }
+  if(c.equipment){
+    return `<div class="card" style="margin:14px 0"><div class="lbl" style="color:#7ee2a0">HIRED ✓</div><div class="rule"></div>
+      <div style="font-size:12.5px;color:#cdd6df">Device: <b>${esc(c.equipment.tierName||c.equipment.tier||'—')}</b>${c.equipment.option?' · '+esc(c.equipment.option):''}<br>Deliver to: ${esc(c.equipment.deliveryName)}<br>${esc(c.equipment.deliveryAddress)}${c.equipment.notes?'<br>Notes: '+esc(c.equipment.notes):''}</div></div>`;
+  }
+  return '';
+}
+async function signWO(id){const co=(document.getElementById('wo_co').value||'').trim(),reg=(document.getElementById('wo_reg').value||'').trim(),name=(document.getElementById('wo_sig').value||'').trim(),agree=document.getElementById('wo_agree').checked,err=document.getElementById('wo_err');
+  if(!co){err.textContent='Enter your company name.';return;} if(name.length<2){err.textContent='Enter your full name to sign.';return;} if(!agree){err.textContent='Please tick to agree.';return;}
+  const j=await api('roomSignWO',{candidateId:id,name,company:{name:co,regNumber:reg},viewer:VIEWER.name});if(j.room){ROOM=j.room;toast('Work Order signed — thank you');openD(id);render();}else err.textContent=j.error||'Failed';}
+async function submitEquipment(id){const tierEl=document.querySelector('#eq_tiers input:checked');const optEl=document.querySelector('#eq_option input:checked');const tier=tierEl?tierEl.value:'';const tierName=tierEl?tierEl.getAttribute('data-name'):'';const option=optEl?optEl.value:'';const deliveryName=(document.getElementById('eq_name').value||'').trim(),deliveryAddress=(document.getElementById('eq_addr').value||'').trim(),notes=(document.getElementById('eq_notes').value||'').trim(),err=document.getElementById('eq_err');
+  if(!tier){err.textContent='Select a device tier.';return;} if(!deliveryAddress){err.textContent='Add a delivery address.';return;}
+  const j=await api('roomEquipment',{candidateId:id,choice:{tier,tierName,option,deliveryName,deliveryAddress,notes},viewer:VIEWER.name});if(j.room){ROOM=j.room;toast('Equipment sheet submitted — thank you');openD(id);render();}else err.textContent=j.error||'Failed';}
 function feedbackHtml(cid){const fb=(ROOM.chat||[]).filter(m=>m.candidateId===cid);return fb.length?fb.map(m=>`<div class="msg"><div class="who">${esc(m.who)} <span>· ${esc(m.side||'')} · ${fmtT(m.ts)}</span></div><div>${esc(m.body)}</div></div>`).join(''):'<div class="muted" style="font-size:12px">No feedback yet.</div>';}
 async function addCandFeedback(id){const i=document.getElementById('fbinput');const v=(i.value||'').trim();if(!v)return;i.value='';const j=await api('roomComment',{body:v,viewer:VIEWER.name,side:'Client',candidateId:id});if(j.room){ROOM=j.room;const el=document.getElementById('candfb');if(el)el.innerHTML=feedbackHtml(id);renderChat();renderFeed();}}
 function declineUI(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);const stages=ROOM.stages||[];const ci=stages.findIndex(s=>s.id===c.stage);const ii=stages.findIndex(s=>s.id==='interview');const needNote=ii>=0&&ci>=ii;
