@@ -269,7 +269,7 @@ exports.handler = async (event) => {
         incoming.chat = existing.chat || [];
         incoming.viewers = existing.viewers || {};
         const prev = {}; (existing.candidates || []).forEach(c => prev[c.id] = c);
-        (incoming.candidates || []).forEach(c => { if (prev[c.id]) { c.stage = prev[c.id].stage || c.stage; c.decision = prev[c.id].decision || c.decision; if (prev[c.id].hasCV) c.hasCV = true; } });
+        (incoming.candidates || []).forEach(c => { if (prev[c.id]) { c.stage = prev[c.id].stage || c.stage; c.decision = prev[c.id].decision || c.decision; if (prev[c.id].hasCV) c.hasCV = true; if (prev[c.id].metaview) c.metaview = prev[c.id].metaview; if (prev[c.id].photo && !c.photo) c.photo = prev[c.id].photo; } });
       }
       incoming.syncedAt = now();
       await store.setJSON(key(incoming.id), incoming);
@@ -326,6 +326,17 @@ exports.handler = async (event) => {
       c.photo = photo;
       await save(r);
       return json(200, { ok: true });
+    }
+    if (action === 'roomSetMetaview') {
+      if (!(await isAdmin())) return json(403, { error: 'admin only' });
+      const r = await load(String(b.roomId || ''));
+      if (!r) return json(404, { error: 'room not found' });
+      const c = (r.candidates || []).find(x => x.id === String(b.candidateId || ''));
+      if (!c) return json(404, { error: 'candidate not found' });
+      const url = String(b.url || '').trim();
+      if (url && !/^https?:\/\//i.test(url)) return json(400, { error: 'Enter a valid link starting with https://' });
+      c.metaview = url; await save(r);
+      return json(200, { ok: true, room: pub(r) });
     }
 
     // ---- Offer → Work Order → Equipment ----
