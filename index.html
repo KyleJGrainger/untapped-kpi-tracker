@@ -706,8 +706,30 @@ function timeoffCandidateHTML(c){
      <button class="btn sm" onclick="App.submitTO()">Submit request</button></div>
    <div class="panel" style="margin-top:14px"><h3>Your requests</h3>${toReqRows(c,false)}</div>`;
 }
+function payoutGate(c){
+  el.innerHTML=`<div class="lab">One quick step</div><h1 style="font-size:26px">Register your payment details</h1>
+    <p class="muted" style="font-size:14px;max-width:620px">Before we can pay you, we need your Wise payment details. These must match your Wise account <b>exactly</b>. You only do this once — your dashboard opens as soon as it's saved.</p>
+    <div class="panel" style="margin-top:12px;max-width:620px">
+      <label class="fl">Full name (exactly as on your Wise account)</label>
+      <input id="po_name" value="${esc(c.name||'')}" placeholder="e.g. Juan Dela Cruz">
+      <label class="fl">Email</label>
+      <input id="po_email" type="email" value="${esc(c.email||'')}" placeholder="you@email.com">
+      <div class="grid2" style="margin-top:4px">
+        <div><label class="fl">Source currency</label><input value="GBP" disabled style="opacity:.55;cursor:not-allowed"></div>
+        <div><label class="fl">Amount currency</label><input value="source" disabled style="opacity:.55;cursor:not-allowed"></div>
+      </div>
+      <label class="fl">Target currency</label>
+      <select id="po_target"><option value="">Choose…</option><option value="PHP">PHP</option><option value="GBP">GBP</option></select>
+      <label class="fl">Amount</label>
+      <input id="po_amount" inputmode="decimal" placeholder="e.g. 1502.10">
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Plain number only — no commas and no £ sign (e.g. 1502.10).</p>
+      <div class="err" id="po_err" style="margin-top:8px"></div>
+      <button class="btn" style="margin-top:14px" onclick="App.savePayout()">Save &amp; enter dashboard</button>
+    </div>`;
+}
 function candidateApp(){
   const c=ME;
+  if(c.location==='Philippines' && !c.payout){ payoutGate(c); return; }
   el.innerHTML=`<div class="lab">Candidate view</div><h1 style="font-size:28px">Hi ${esc((c.name||'').split(' ')[0])}</h1>
     <p class="muted" style="font-size:14px">Keep your numbers and check-ins up to date. ${esc(company||'')}</p>
     <div class="tabs">${['log:Log progress','journey:Your journey','timeoff:Time off','pulse:Weekly pulse','blockers:Blockers','kudos:Feedback'].map(t=>{const[k,n]=t.split(':');return `<button class="tab ${tab2===k?'on':''}" onclick="App.kTab('${k}')">${n}</button>`}).join('')}</div>
@@ -786,6 +808,13 @@ const App={
   setScale:(name,n)=>{pulseDraft[name]=n;document.querySelectorAll(`[data-sc="${name}"] button`).forEach((b,i)=>b.classList.toggle('on',i+1===n));},
   savePulse:async()=>{const wk=weekKey(new Date());const note=$('#pnote').value;const ts=new Date().toISOString();const j=await api('savePulse',{candidateId:ME.id,weekKey:wk,workload:pulseDraft.workload,confidence:pulseDraft.confidence,supported:pulseDraft.supported,note,ts});if(j.ok){ME.pulse=ME.pulse||{};ME.pulse[wk]={...pulseDraft,note,ts};$('#pok').textContent='Saved ✓';}},
   raiseBlocker:async()=>{const t=$('#bnew').value.trim();if(!t)return;const j=await api('addBlocker',{candidateId:ME.id,text:t});if(j.ok){blockerDraft='';await refresh();renderKBody();toast('Blocker raised');}},
+  savePayout:async()=>{const name=$('#po_name').value.trim(),email=$('#po_email').value.trim(),target=$('#po_target').value,amount=$('#po_amount').value.trim(),err=$('#po_err');err.textContent='';
+    if(name.length<2){err.textContent='Enter your full name (must match your Wise account).';return;}
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){err.textContent='Enter a valid email.';return;}
+    if(!target){err.textContent='Choose your target currency.';return;}
+    if(!/^\d+(\.\d{1,2})?$/.test(amount)){err.textContent='Amount must be a plain number — no commas, no £ (e.g. 1502.10).';return;}
+    const j=await api('savePayout',{candidateId:ME.id,name,email,targetCurrency:target,amount});
+    if(j.ok){await refresh();candidateApp();toast('Payment details saved');}else{err.textContent=j.error||'Could not save';}},
   // customer view switch
   cView:v=>{cView=v;customerApp();},
   // time off — customer
