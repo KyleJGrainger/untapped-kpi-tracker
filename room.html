@@ -25,9 +25,10 @@ header.top img{height:34px;display:block}
 .hub{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:14px}
 .layout{display:grid;grid-template-columns:1fr 330px;gap:16px;align-items:start}
 .board{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
-.col{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:11px;min-height:220px}
-.col h3{font-size:11px;letter-spacing:1.4px;color:var(--gold);margin:2px 0 4px;text-transform:uppercase;font-weight:700}
-.col .barunder{width:26px;height:2px;background:var(--orange);margin-bottom:10px}
+.col{background:var(--panel);border:1px solid #333d49;border-radius:14px;padding:11px;min-height:220px}
+.col h3{font-size:11px;letter-spacing:1.4px;color:#aab4bf;margin:2px 0 6px;text-transform:uppercase;font-weight:700}
+.col h3 .cnt{color:#6b7480}
+.col .barunder{width:100%;height:1px;background:var(--line);margin-bottom:10px}
 .col .cnt{color:var(--muted);font-weight:400;letter-spacing:0}
 .card{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:11px;margin-bottom:9px;cursor:grab;transition:border-color .15s}
 .card:hover{border-color:var(--gold)}
@@ -81,7 +82,7 @@ header.top img{height:34px;display:block}
     <div class="layout">
       <div><div class="board" id="board"></div></div>
       <div class="rail">
-        <div class="lbl">ACTIVITY</div><div class="rule"></div><div id="feed"></div>
+        <div class="lbl" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleFeed()"><span>ACTIVITY <span id="feedcount" class="muted" style="font-weight:400;letter-spacing:0"></span></span><span id="feedtog" style="color:var(--gold);font-weight:600;letter-spacing:0">show</span></div><div class="rule"></div><div id="feed"></div>
         <div class="lbl" style="margin-top:18px">DISCUSSION</div><div class="rule"></div><div id="chat"></div>
         <div class="chatbox"><input id="msg" placeholder="Message the team…"><button class="btn" onclick="send()">Send</button></div>
       </div>
@@ -170,15 +171,27 @@ function photoOrInitials(c,size){const ini=esc((c.name||'?').split(' ').map(w=>w
   return c.photo?`<img src="${esc(c.photo)}" alt="" style="width:${size}px;height:${size}px;border-radius:${size>40?'12px':'8px'};object-fit:cover;border:1px solid var(--line);flex:0 0 auto">`
     :`<div style="width:${size}px;height:${size}px;border-radius:${size>40?'12px':'8px'};background:linear-gradient(135deg,#3a2a10,#2b333d);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-weight:700;color:var(--gold);border:1px solid var(--line);flex:0 0 auto;font-size:${size>40?'22px':'12px'}">${ini}</div>`;}
 function card(c){return `<div class="card" draggable="true" ondragstart="event.dataTransfer.setData('id','${c.id}')" onclick="openD('${c.id}')">
-  <div style="display:flex;gap:8px;align-items:center">${photoOrInitials(c,34)}<div class="nm" style="line-height:1.2">${esc(c.name)}<br><span class="stars">${stars(c.rating)}</span></div></div>
+  <div style="display:flex;gap:8px;align-items:center">${photoOrInitials(c,34)}<div class="nm" style="line-height:1.2">${esc(c.name)}<br><span class="stars" title="Untapped delivery lead's rating">${stars(c.rating)}</span></div></div>
   <div class="hl" style="margin-top:6px">${esc(c.headline||'Recruitment consultant')}</div>
   ${(c.niche||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}
   <div class="cost">${money(c.cost)}/mo</div></div>`;}
 async function move(id,stage){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c||c.stage===stage)return;
-  const lbl=(ROOM.stages.find(s=>s.id===stage)||{}).label;c.stage=stage;render();
+  const stages=ROOM.stages||[]; const from=stages.findIndex(s=>s.id===c.stage), to=stages.findIndex(s=>s.id===stage);
+  const lbl=(stages[to]||{}).label;
+  if(to<from){ if(!confirm(`Move ${c.name} back to ${lbl}? This notifies the Untapped team.`)){ render(); return; } }
+  c.stage=stage;render();
   toast(`Moved ${c.name} → ${lbl}. Team notified.`);
-  const j=await api('roomMove',{candidateId:id,stage,viewer:VIEWER.name});if(j.room)ROOM=j.room,render();}
-function renderFeed(){const f=ROOM.activity||[];document.getElementById('feed').innerHTML=f.length?f.slice(0,12).map(x=>`<div class="act">${esc(x.text)}<div class="t">${fmtT(x.ts)}</div></div>`).join(''):'<div class="act" style="border-color:var(--line);color:var(--muted)">No activity yet.</div>';}
+  const j=await api('roomMove',{candidateId:id,stage,viewer:VIEWER.name});if(j.room){ROOM=j.room;render();}}
+async function moveStage(id,sid){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return;const lbl=(ROOM.stages.find(s=>s.id===sid)||{}).label;c.stage=sid;closeD();render();toast(`Moved ${c.name} → ${lbl}. Team notified.`);const j=await api('roomMove',{candidateId:id,stage:sid,viewer:VIEWER.name});if(j.room){ROOM=j.room;render();}}
+let feedOpen=false;
+function toggleFeed(){feedOpen=!feedOpen;renderFeed();}
+function renderFeed(){const f=ROOM.activity||[];const el=document.getElementById('feed');const cnt=document.getElementById('feedcount');const tog=document.getElementById('feedtog');
+  if(cnt)cnt.textContent=f.length?('· '+f.length):'';
+  if(tog)tog.textContent=f.length?(feedOpen?'hide':'show'):'';
+  if(!f.length){el.innerHTML='<div class="act" style="border-color:var(--line);color:var(--muted)">No activity yet.</div>';return;}
+  if(!feedOpen){el.innerHTML=`<div class="act">${esc(f[0].text)}<div class="t">${fmtT(f[0].ts)}</div></div>`+(f.length>1?`<div class="muted" style="font-size:11.5px;padding-left:9px;margin-top:2px">+${f.length-1} more — tap ACTIVITY to expand</div>`:'');return;}
+  el.innerHTML=f.slice(0,40).map(x=>`<div class="act">${esc(x.text)}<div class="t">${fmtT(x.ts)}</div></div>`).join('');
+}
 function fmtT(ts){try{return new Date(ts).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}catch(e){return''}}
 function renderChat(){document.getElementById('chat').innerHTML=(ROOM.chat||[]).map(m=>msgHtml(m)).join('')||'<div class="muted" style="font-size:12px">No messages yet.</div>';}
 function msgHtml(m){return `<div class="msg"><div class="who">${esc(m.who)} <span>· ${esc(m.side||'')} · ${fmtT(m.ts)}</span></div><div>${esc(m.body)}</div>`+
@@ -188,16 +201,16 @@ async function send(){const i=document.getElementById('msg');const v=i.value.tri
 function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return;
   api('roomView',{candidateId:id,name:VIEWER.name,email:VIEWER.email,seconds:0});
   const cvUrl='/.netlify/functions/cv?w='+encodeURIComponent(ROOM_ID)+'&c='+encodeURIComponent(id);
+  const stages=ROOM.stages||[]; const ci=stages.findIndex(s=>s.id===c.stage); const curLabel=(stages[ci]||{}).label||'—'; const fwd=stages.slice(ci+1);
   const d=document.getElementById('dpad');
   d.innerHTML=`<div style="display:flex;gap:14px;align-items:center">
     ${photoOrInitials(c,66)}
-    <div><div class="dname">${esc(c.name)} <span class="stars">${stars(c.rating)}</span></div>
+    <div><div class="dname">${esc(c.name)} <span class="stars" title="Untapped delivery lead's rating">${stars(c.rating)}</span></div>
     <div class="muted" style="font-size:12.5px">${esc(c.headline||'Recruitment consultant')}</div>
     <div class="muted" style="font-size:12px">${esc(c.location||'')}${c.linkedin?' · <a href="https://linkedin.com/in/'+esc(c.linkedin)+'" target="_blank">LinkedIn ↗</a>':''}</div></div></div>
+    <div style="margin:12px 0 2px"><span class="tag" style="background:#1c2530;border-color:#3a4552;color:#cdd6df">Current stage: <b style="color:#fff">${esc(curLabel)}</b></span></div>
     <div class="acts">
-      <button class="btn sm" onclick="act('${c.id}','Interview requested')">Request interview</button>
-      <button class="btn sm ghost" onclick="act('${c.id}','2nd interview requested')">2nd interview</button>
-      <button class="btn sm ghost" onclick="act('${c.id}','Offer initiated')">Make offer</button>
+      ${fwd.map(s=>`<button class="btn sm" onclick="moveStage('${c.id}','${s.id}')">→ ${esc(s.label)}</button>`).join('')||'<span class="muted" style="font-size:12px">Final stage.</span>'}
       <button class="btn sm ghost" style="border-color:#5a2b28;color:#e88" onclick="act('${c.id}','Not for us')">Not for us</button>
     </div>
     <div class="kv"><span class="k">Monthly cost (all-in)</span><span style="color:var(--gold);font-weight:700">${money(c.cost)}/mo</span></div>
@@ -207,7 +220,8 @@ function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return
     <div class="kv"><span class="k">Education</span><span style="text-align:right;max-width:230px">${esc(c.edu||'—')}</span></div>
     <div class="lbl" style="margin:16px 0 4px">EXPERIENCE</div><div class="rule"></div>
     ${(c.exp&&c.exp.length)?c.exp.map(e=>`<div class="exp"><b>${esc(e[0])}</b><div class="c">${esc(e[1])} · ${esc(e[2])}</div></div>`).join(''):'<div class="exp muted">Profile being finalised.</div>'}
-    <div style="margin-top:16px;display:flex;gap:6px;flex-wrap:wrap">
+    ${c.hasCV?`<div class="lbl" style="margin:16px 0 4px">CV</div><div class="rule"></div><iframe src="${cvUrl}" style="width:100%;height:440px;border:1px solid var(--line);border-radius:10px;background:#fff" title="Candidate CV"></iframe>`:''}
+    <div style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap">
       ${c.hasCV?`<button class="btn" onclick="downloadCv('${c.id}')">⬇ Download CV</button>`:`<button class="btn ghost" onclick="act('${c.id}','Requested CV')">Request CV</button>`}
       ${ROOM.calendlyUrl?`<a class="btn ghost" href="${esc(ROOM.calendlyUrl)}" target="_blank">📅 Schedule interview</a>`:''}
     </div>
