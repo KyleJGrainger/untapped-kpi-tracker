@@ -423,13 +423,15 @@ async function openRoom(id){
         <div><b>${esc(c.name)}</b> <span class="muted" style="font-size:12px">${c.hasCV?'· CV ✓':'· no CV'}${c.photo?' · photo ✓':''} · ${esc((room.stages.find(s=>s.id===c.stage)||{}).label||c.stage)}</span></div>
         <div class="row"><label class="btn ghost sm" style="cursor:pointer">CV<input type="file" accept="application/pdf" style="display:none" onchange="roomUploadCV('${id}','${c.id}',this)"></label>
         <label class="btn ghost sm" style="cursor:pointer">Photo<input type="file" accept="image/*" style="display:none" onchange="roomUploadPhoto('${id}','${c.id}',this)"></label></div>
-      </div>${woLine}</div>`;
+      </div>
+      <div class="row" style="margin-top:6px;gap:6px;align-items:center"><input id="mv_${c.id}" value="${esc(c.metaview||'')}" placeholder="Metaview interview link (https://…)" style="flex:1;font-size:12px"><button class="btn ghost sm" onclick="saveMetaview('${id}','${c.id}')">Save link</button>${c.metaview?`<a href="${esc(c.metaview)}" target="_blank" class="btn ghost sm" style="text-decoration:none">Open ↗</a>`:''}</div>${woLine}</div>`;
   }).join('')||'<p class="muted" style="font-size:13px">No candidates in this room.</p>';
   html+=`</div>`;
   box.innerHTML=html;
 }
 function roomUploadCV(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>6*1024*1024){toast('Max 6MB');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading CV…');const j=await roomApi('roomUploadCV',{roomId:id,candidateId:cid,dataBase64:String(r.result)});toast(j.ok?'CV uploaded':(j.error||'Upload failed'));if(j.ok)openRoom(id);};r.readAsDataURL(f);}
 function roomUploadPhoto(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>2*1024*1024){toast('Max 2MB');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading photo…');const j=await roomApi('roomUploadPhoto',{roomId:id,candidateId:cid,photo:String(r.result)});toast(j.ok?'Photo uploaded':(j.error||'Upload failed'));if(j.ok)openRoom(id);};r.readAsDataURL(f);}
+async function saveMetaview(id,cid){const el=document.getElementById('mv_'+cid);const url=el?el.value.trim():'';const j=await roomApi('roomSetMetaview',{roomId:id,candidateId:cid,url});toast(j.ok?'Metaview link saved':(j.error||'Failed'));if(j.ok)openRoom(id);}
 function raiseWOForm(id,cid){const el=document.getElementById('woform_'+cid);if(!el)return;
   el.innerHTML=`<div class="card" style="margin-top:8px">
     <div class="lbl" style="color:#FFC600">RAISE WORK ORDER</div>
