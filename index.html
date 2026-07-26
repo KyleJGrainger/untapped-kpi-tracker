@@ -230,7 +230,7 @@ function landing(){
 
     <!-- PROOF -->
     <div class="lp-proof" style="max-width:920px;margin:24px auto 0;padding:0 22px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
-      ${[['150+','companies trust us'],['&lt;1%','resignation rate'],['C1','English, minimum'],['50–70%','cost saving']].map(x=>`<div class="card" style="padding:16px 10px"><div style="font-family:Iowan Old Style,Georgia,serif;font-size:26px;color:#FFC600">${x[0]}</div><div class="muted" style="font-size:12px;margin-top:2px">${x[1]}</div></div>`).join('')}
+      ${[['150+','businesses served'],['&lt;1%','resignation — 20× below UK avg'],['95%+','growth from referrals'],['50–70%','cost saving vs UK']].map(x=>`<div class="card" style="padding:16px 10px"><div style="font-family:Iowan Old Style,Georgia,serif;font-size:26px;color:#FFC600">${x[0]}</div><div class="muted" style="font-size:12px;margin-top:2px">${x[1]}</div></div>`).join('')}
     </div>
 
     <!-- HOW IT WORKS -->
@@ -241,11 +241,48 @@ function landing(){
       <p style="max-width:760px;margin:22px auto 0;padding:0 22px;text-align:center;color:#cdd6df;font-size:14px;line-height:1.6">Every placement is <b style="color:#FFC600">fully inclusive</b> — EOR, HR, payroll, legal support, IT &amp; workspace all handled by Untapped, for one simple monthly cost.</p>
     </div>
 
-    <!-- TESTIMONIAL -->
-    <div style="max-width:720px;margin:52px auto 0;padding:0 22px;text-align:center">
-      <div class="card" style="padding:26px">
-        <p style="font-family:Iowan Old Style,Georgia,serif;font-size:18px;line-height:1.6;margin:0">“Untapped hooked us up with awesome offshore recruiters who've been perfect for us — they took the time to get what we needed and delivered. We couldn't speak highly enough about them.”</p>
-        <p class="muted" style="font-size:13px;margin-top:12px">Martyn Aitken · Director, AJ Connect</p>
+    <!-- WHAT'S INCLUDED -->
+    <div style="margin-top:56px">${S('A total workforce solution')}
+      <p style="max-width:720px;margin:-8px auto 22px;padding:0 22px;text-align:center;color:#cdd6df;font-size:14px;line-height:1.6">We don't just find talent — we run the entire employment lifecycle, so you get a teammate without the admin.</p>
+      <div style="max-width:900px;margin:0 auto;padding:0 22px;display:flex;flex-wrap:wrap;gap:10px;justify-content:center">
+        ${['Advertising &amp; Sourcing','Assessment &amp; Selection','Onboarding','HR &amp; Payroll','Office &amp; IT set-up','Offboarding'].map(x=>`<div class="card" style="padding:12px 16px;font-size:14px"><span style="color:#FF6900">●</span> ${x}</div>`).join('')}
+      </div>
+    </div>
+
+    <!-- ROLES -->
+    <div style="margin-top:52px">${S('One partner for every function')}
+      <div style="max-width:820px;margin:0 auto;padding:0 22px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">
+        ${['Recruitment (180 / 360)','Sales &amp; SDR','Finance &amp; Accounting','Tech &amp; Engineering','Customer Success','Marketing &amp; Content','Operations &amp; VAs','Executive Assistants','Data &amp; Research'].map(r=>`<span style="border:1px solid #2b333d;border-radius:20px;padding:7px 14px;font-size:13px;color:#cdd6df">${r}</span>`).join('')}
+      </div>
+      <p class="muted" style="max-width:640px;margin:18px auto 0;padding:0 22px;text-align:center;font-size:13px;line-height:1.6">Every associate is <b style="color:#FFC600">C1-level English</b> and works your business hours — a genuine extension of your team, not a faceless outsource.</p>
+    </div>
+
+    <!-- MISSION -->
+    <div style="max-width:760px;margin:52px auto 0;padding:0 22px;text-align:center">
+      <p style="font-family:Iowan Old Style,Georgia,serif;font-size:20px;line-height:1.6;color:#eef0f3;margin:0">Replacing outdated outsourcing with a fair, transparent model — elite talent from South Africa &amp; the Philippines, <span style="color:#FFC600">paid fairly and treated with respect</span>.</p>
+      <p class="muted" style="font-size:12px;margin-top:10px">Proudly building a fairer model for global work.</p>
+    </div>
+
+    <!-- MEDIA -->
+    <div style="margin-top:52px">${S('In the media')}
+      <div style="max-width:760px;margin:0 auto;padding:0 22px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center">
+        <div class="card" style="padding:16px;flex:1;min-width:240px"><b style="font-size:14px">Tapping into Offshore Talent</b><div class="muted" style="font-size:12.5px;margin-top:4px">Kyle Grainger &amp; Nitin Sharma — podcast interview</div></div>
+        <div class="card" style="padding:16px;flex:1;min-width:240px"><b style="font-size:14px">Hiring experienced recruiters from untapped locations</b><div class="muted" style="font-size:12.5px;margin-top:4px">S7 Ep10 — featured guest</div></div>
+      </div>
+      <p class="muted" style="font-size:12px;text-align:center;margin-top:12px">Our own podcast, “Outsourcing Is Dead”, lands here soon.</p>
+    </div>
+
+    <!-- TESTIMONIALS -->
+    <div style="margin-top:52px">${S('What clients say')}
+      <div style="max-width:900px;margin:0 auto;padding:0 22px;display:flex;flex-wrap:wrap;gap:14px">
+        <div class="card" style="padding:24px;flex:1;min-width:280px">
+          <p style="font-family:Iowan Old Style,Georgia,serif;font-size:16.5px;line-height:1.6;margin:0">“Untapped hooked us up with awesome offshore recruiters who've been perfect for us — they took the time to get what we needed and delivered. We couldn't speak highly enough about them.”</p>
+          <p class="muted" style="font-size:13px;margin-top:12px">Martyn Aitken · Director, AJ Connect</p>
+        </div>
+        <div class="card" style="padding:24px;flex:1;min-width:280px">
+          <p style="font-family:Iowan Old Style,Georgia,serif;font-size:16.5px;line-height:1.6;margin:0">“The challenge is always finding a supplier that truly understands a small UK business. Untapped ticked every box — after one consultation they were working my brief and sending relevant CVs, with an excellent turnaround.”</p>
+          <p class="muted" style="font-size:13px;margin-top:12px">Dal Pawar · Owner, AssureBio</p>
+        </div>
       </div>
     </div>
 
