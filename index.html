@@ -244,8 +244,8 @@ function landing(){
       <div class="lab" style="text-align:center">The detail</div>
       <div style="width:34px;height:3px;background:#FF6900;margin:6px auto 22px"></div>
       ${acc.map((r,i)=>`<div class="card" style="padding:0;margin-bottom:10px;overflow:hidden">
-        <button onclick="lpAcc(${i})" style="width:100%;background:none;border:0;color:#fff;cursor:pointer;padding:15px 18px;display:flex;justify-content:space-between;align-items:center;font-size:15px;font-family:inherit;text-align:left"><span style="font-weight:600">${r.t}</span><span id="acc_ch_${i}" style="color:#FF6900;font-size:20px;line-height:1">+</span></button>
-        <div id="acc_bd_${i}" style="display:none;padding:2px 18px 20px">${r.b}</div>
+        <button onclick="lpAcc(${i})" style="width:100%;background:none;border:0;color:#fff;cursor:pointer;padding:15px 18px;display:flex;justify-content:space-between;align-items:center;font-size:15px;font-family:inherit;text-align:left"><span style="font-weight:600">${r.t}</span><span id="acc_ch_${i}" style="color:#FF6900;font-size:20px;line-height:1">${i===0?'−':'+'}</span></button>
+        <div id="acc_bd_${i}" style="display:${i===0?'block':'none'};padding:2px 18px 20px">${r.b}</div>
       </div>`).join('')}
     </div>
 
