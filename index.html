@@ -206,6 +206,12 @@ function route(){
 function landing(){
   const CAL='https://calendly.com/try-untapped/intro-to-untapped';
   const S=(t)=>`<div style="max-width:920px;margin:0 auto;padding:0 22px"><div class="lab" style="text-align:center">${t}</div><div style="width:34px;height:3px;background:#FF6900;margin:6px auto 22px"></div>`;
+  const acc=[
+    {t:'How it works', b:`<div class="lp-steps" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">${[['1','Sign your terms','Review and e-sign your regional MSA in minutes — your details flow straight in.'],['2','Pay a refundable deposit','A £1,000 deposit kicks off your project — fully refundable if we fail to deliver.'],['3','Expert discovery call','Meet your dedicated delivery lead, who scopes the role and agrees the ideal profile.'],['4','Meet your shortlist','We source, vet and present a shortlist in your own branded room. Interview and hire.']].map(s=>`<div class="card" style="padding:16px"><div style="font-family:Iowan Old Style,Georgia,serif;font-size:22px;color:#FFC600">${s[0]}</div><b style="display:block;margin:6px 0 4px;font-size:14.5px">${s[1]}</b><span class="muted" style="font-size:12.5px;line-height:1.5">${s[2]}</span></div>`).join('')}</div><p style="margin:16px 0 0;text-align:center;color:#cdd6df;font-size:14px;line-height:1.6">Every placement is <b style="color:#FFC600">fully inclusive</b> — EOR, HR, payroll, legal, IT &amp; workspace, for one simple monthly cost.</p>`},
+    {t:'A total workforce solution', b:`<p style="margin:0 0 16px;text-align:center;color:#cdd6df;font-size:14px;line-height:1.6">We run the entire employment lifecycle, so you get a teammate without the admin.</p><div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center">${['Advertising &amp; Sourcing','Assessment &amp; Selection','Onboarding','HR &amp; Payroll','Office &amp; IT set-up','Offboarding'].map(x=>`<div style="border:1px solid #2b333d;border-radius:8px;padding:10px 14px;font-size:14px"><span style="color:#FF6900">●</span> ${x}</div>`).join('')}</div>`},
+    {t:'One partner for every function', b:`<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center">${['Recruitment (180 / 360)','Sales &amp; SDR','Finance &amp; Accounting','Tech &amp; Engineering','Customer Success','Marketing &amp; Content','Operations &amp; VAs','Executive Assistants','Data &amp; Research'].map(r=>`<span style="border:1px solid #2b333d;border-radius:20px;padding:7px 14px;font-size:13px;color:#cdd6df">${r}</span>`).join('')}</div><p class="muted" style="margin:16px auto 0;max-width:560px;text-align:center;font-size:13px;line-height:1.6">Every associate is <b style="color:#FFC600">C1-level English</b> and works your business hours — a genuine extension of your team.</p>`},
+    {t:'In the media', b:`<div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center"><div class="card" style="padding:16px;flex:1;min-width:220px"><b style="font-size:14px">Tapping into Offshore Talent</b><div class="muted" style="font-size:12.5px;margin-top:4px">Kyle Grainger &amp; Nitin Sharma — podcast interview</div></div><div class="card" style="padding:16px;flex:1;min-width:220px"><b style="font-size:14px">Hiring experienced recruiters from untapped locations</b><div class="muted" style="font-size:12.5px;margin-top:4px">S7 Ep10 — featured guest</div></div></div><p class="muted" style="text-align:center;font-size:12px;margin-top:12px">Our own podcast, “Outsourcing Is Dead”, lands here soon.</p>`}
+  ];
   el.innerHTML=`<div style="padding-bottom:70px;overflow-x:hidden">
     <style>
       @media(max-width:640px){
@@ -233,43 +239,14 @@ function landing(){
       ${[['150+','businesses served'],['&lt;1%','resignation — 20× below UK avg'],['95%+','growth from referrals'],['50–70%','cost saving vs UK']].map(x=>`<div class="card" style="padding:16px 10px"><div style="font-family:Iowan Old Style,Georgia,serif;font-size:26px;color:#FFC600">${x[0]}</div><div class="muted" style="font-size:12px;margin-top:2px">${x[1]}</div></div>`).join('')}
     </div>
 
-    <!-- HOW IT WORKS -->
-    <div style="margin-top:56px">${S('How it works')}
-      <div class="lp-steps" style="max-width:960px;margin:0 auto;padding:0 22px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-        ${[['1','Sign your terms','Review and e-sign your regional MSA in minutes — your company details flow straight in.'],['2','Pay a refundable deposit','A £1,000 deposit kicks off your hiring project — fully refundable if we fail to deliver.'],['3','Expert discovery call','Meet your dedicated delivery lead — an on-the-ground expert who scopes the role, benchmarks salary and agrees the ideal profile with you.'],['4','Meet your shortlist','We source, vet and present a shortlist in your own branded room. Interview and hire.']].map(s=>`<div class="card" style="padding:16px"><div style="font-family:Iowan Old Style,Georgia,serif;font-size:22px;color:#FFC600">${s[0]}</div><b style="display:block;margin:6px 0 4px;font-size:14.5px">${s[1]}</b><span class="muted" style="font-size:12.5px;line-height:1.5">${s[2]}</span></div>`).join('')}
-      </div>
-      <p style="max-width:760px;margin:22px auto 0;padding:0 22px;text-align:center;color:#cdd6df;font-size:14px;line-height:1.6">Every placement is <b style="color:#FFC600">fully inclusive</b> — EOR, HR, payroll, legal support, IT &amp; workspace all handled by Untapped, for one simple monthly cost.</p>
-    </div>
-
-    <!-- WHAT'S INCLUDED -->
-    <div style="margin-top:56px">${S('A total workforce solution')}
-      <p style="max-width:720px;margin:-8px auto 22px;padding:0 22px;text-align:center;color:#cdd6df;font-size:14px;line-height:1.6">We don't just find talent — we run the entire employment lifecycle, so you get a teammate without the admin.</p>
-      <div style="max-width:900px;margin:0 auto;padding:0 22px;display:flex;flex-wrap:wrap;gap:10px;justify-content:center">
-        ${['Advertising &amp; Sourcing','Assessment &amp; Selection','Onboarding','HR &amp; Payroll','Office &amp; IT set-up','Offboarding'].map(x=>`<div class="card" style="padding:12px 16px;font-size:14px"><span style="color:#FF6900">●</span> ${x}</div>`).join('')}
-      </div>
-    </div>
-
-    <!-- ROLES -->
-    <div style="margin-top:52px">${S('One partner for every function')}
-      <div style="max-width:820px;margin:0 auto;padding:0 22px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">
-        ${['Recruitment (180 / 360)','Sales &amp; SDR','Finance &amp; Accounting','Tech &amp; Engineering','Customer Success','Marketing &amp; Content','Operations &amp; VAs','Executive Assistants','Data &amp; Research'].map(r=>`<span style="border:1px solid #2b333d;border-radius:20px;padding:7px 14px;font-size:13px;color:#cdd6df">${r}</span>`).join('')}
-      </div>
-      <p class="muted" style="max-width:640px;margin:18px auto 0;padding:0 22px;text-align:center;font-size:13px;line-height:1.6">Every associate is <b style="color:#FFC600">C1-level English</b> and works your business hours — a genuine extension of your team, not a faceless outsource.</p>
-    </div>
-
-    <!-- MISSION -->
-    <div style="max-width:760px;margin:52px auto 0;padding:0 22px;text-align:center">
-      <p style="font-family:Iowan Old Style,Georgia,serif;font-size:20px;line-height:1.6;color:#eef0f3;margin:0">Replacing outdated outsourcing with a fair, transparent model — elite talent from South Africa &amp; the Philippines, <span style="color:#FFC600">paid fairly and treated with respect</span>.</p>
-      <p class="muted" style="font-size:12px;margin-top:10px">Proudly building a fairer model for global work.</p>
-    </div>
-
-    <!-- MEDIA -->
-    <div style="margin-top:52px">${S('In the media')}
-      <div style="max-width:760px;margin:0 auto;padding:0 22px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center">
-        <div class="card" style="padding:16px;flex:1;min-width:240px"><b style="font-size:14px">Tapping into Offshore Talent</b><div class="muted" style="font-size:12.5px;margin-top:4px">Kyle Grainger &amp; Nitin Sharma — podcast interview</div></div>
-        <div class="card" style="padding:16px;flex:1;min-width:240px"><b style="font-size:14px">Hiring experienced recruiters from untapped locations</b><div class="muted" style="font-size:12.5px;margin-top:4px">S7 Ep10 — featured guest</div></div>
-      </div>
-      <p class="muted" style="font-size:12px;text-align:center;margin-top:12px">Our own podcast, “Outsourcing Is Dead”, lands here soon.</p>
+    <!-- ACCORDION -->
+    <div style="max-width:720px;margin:46px auto 0;padding:0 22px">
+      <div class="lab" style="text-align:center">The detail</div>
+      <div style="width:34px;height:3px;background:#FF6900;margin:6px auto 22px"></div>
+      ${acc.map((r,i)=>`<div class="card" style="padding:0;margin-bottom:10px;overflow:hidden">
+        <button onclick="lpAcc(${i})" style="width:100%;background:none;border:0;color:#fff;cursor:pointer;padding:15px 18px;display:flex;justify-content:space-between;align-items:center;font-size:15px;font-family:inherit;text-align:left"><span style="font-weight:600">${r.t}</span><span id="acc_ch_${i}" style="color:#FF6900;font-size:20px;line-height:1">+</span></button>
+        <div id="acc_bd_${i}" style="display:none;padding:2px 18px 20px">${r.b}</div>
+      </div>`).join('')}
     </div>
 
     <!-- TESTIMONIALS -->
@@ -311,8 +288,19 @@ function landing(){
       </div>
     </div>
 
+    <!-- MISSION -->
+    <div style="max-width:760px;margin:60px auto 0;padding:0 22px;text-align:center">
+      <p style="font-family:Iowan Old Style,Georgia,serif;font-size:19px;line-height:1.6;color:#eef0f3;margin:0">Replacing outdated outsourcing with a fair, transparent model — elite talent from South Africa &amp; the Philippines, <span style="color:#FFC600">paid fairly and treated with respect</span>.</p>
+      <p class="muted" style="font-size:12px;margin-top:10px">Proudly building a fairer model for global work.</p>
+    </div>
+
     <p class="muted" style="font-size:12px;text-align:center;margin-top:44px">Already a client with a personal link? Open that link to reach your account. · Untapped team? <a href="/admin.html" style="color:#FF6900">Admin console →</a></p>
   </div>`;
+}
+function lpAcc(i){
+  const bd=document.getElementById('acc_bd_'+i), ch=document.getElementById('acc_ch_'+i);
+  if(!bd)return; const open=bd.style.display!=='none';
+  bd.style.display=open?'none':'block'; if(ch)ch.textContent=open?'+':'−';
 }
 function createForm(){
   el.innerHTML=`<div class="center"><div class="card" style="max-width:480px;width:100%">
