@@ -43,11 +43,22 @@ function workingDays(start, end, loc){
   return { days, skipped };
 }
 function bookedDays(c){ return (c.timeoff||[]).filter(r=>r.status==='approved').reduce((t,r)=>t+workingDays(r.start,r.end,c.location).days,0); }
-async function mail(to, subject, html){
+async function mail(to, subject, html, attachments){
   const { RESEND_API_KEY, FROM_EMAIL } = process.env;
   const list = (Array.isArray(to)?to:[to]).filter(Boolean);
   if(!RESEND_API_KEY || !FROM_EMAIL || !list.length) return;
-  try { await sendEmail(RESEND_API_KEY, { from: FROM_EMAIL, to: list, subject, html }); } catch(e){}
+  const payload = { from: FROM_EMAIL, to: list, subject, html };
+  if (attachments && attachments.length) payload.attachments = attachments;
+  try { await sendEmail(RESEND_API_KEY, payload); } catch(e){}
+}
+// Fetch the signed-doc PDF from doc.js and email it as an attachment.
+async function emailSignedDoc({ kind, wsId, candidateId, base, ws, recipients, subject, heading, body }){
+  try {
+    const r = await fetch(base.replace(/\/$/,'') + '/.netlify/functions/doc', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ kind, wsId, candidateId }) });
+    const j = await r.json();
+    if(!j || !j.ok || !j.pdfBase64) return;
+    await mail(recipients, subject, emailWrap(heading, body, ws, base), [{ filename: j.filename, content: j.pdfBase64 }]);
+  } catch(e){}
 }
 function emailWrap(heading, bodyHtml, ws, siteUrl){
   const link = siteUrl ? `${siteUrl.replace(/\/$/,'')}/?w=${ws.id}` : '';
@@ -400,13 +411,19 @@ exports.handler = async (event) => {
     if (action === 'adminCountersignMSA') {
       const name = String(b.name || '').trim(); if (name.length < 2) return json(400, { error: 'enter your name' });
       w.onboarding.msaCountersign = { name, title: String(b.title || 'CEO').slice(0, 80), ts: new Date().toISOString() };
-      await saveW(); return json(200, { ok: true });
+      await saveW();
+      await emailSignedDoc({ kind: 'msa', wsId: b.wsId, base: reqBase, ws: w, recipients: [...new Set([w.customerEmail, ...TEAM].filter(Boolean))], subject: `Executed MSA — ${w.company || 'client'}`, heading: 'Your signed Master Services Agreement', body: `<p style="font-size:15px;color:#333">The Master Services Agreement for <b>${esc(w.company || '')}</b> is now fully executed by both parties. A signed PDF copy is attached for your records.</p>` });
+      return json(200, { ok: true });
     }
     if (action === 'adminCountersignWO') {
       if (!w.onboarding.workOrder) return json(400, { error: 'no work order yet' });
       const name = String(b.name || '').trim(); if (name.length < 2) return json(400, { error: 'enter your name' });
       w.onboarding.workOrder.untappedSigned = { name, title: String(b.title || 'CEO').slice(0, 80), ts: new Date().toISOString() };
-      await saveW(); return json(200, { ok: true });
+      await saveW();
+      const woNm = w.onboarding.workOrder.employeeName || (w.onboarding.hired && w.onboarding.hired.name) || '';
+      const woId = (w.onboarding.hired && w.onboarding.hired.candidateId) || '';
+      await emailSignedDoc({ kind: 'wo', wsId: b.wsId, candidateId: woId, base: reqBase, ws: w, recipients: [...new Set([w.customerEmail, ...TEAM].filter(Boolean))], subject: `Executed Work Order — ${woNm || w.company || 'client'}`, heading: 'Your signed Work Order', body: `<p style="font-size:15px;color:#333">The Work Order${woNm ? ` for <b>${esc(woNm)}</b>` : ''} is now fully executed. A signed PDF copy is attached for your records.</p>` });
+      return json(200, { ok: true });
     }
     if (action === 'adminAddCandidate') {
       const c = { id: uid(), name: String(b.name || 'Candidate').trim(), commentary: String(b.commentary || '').slice(0, 600), salary: Math.max(0, Number(b.salary) || 0), hasCV: false, requests: [], ts: new Date().toISOString() };

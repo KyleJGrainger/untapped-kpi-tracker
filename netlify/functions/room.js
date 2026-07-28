@@ -26,11 +26,13 @@ async function sendEmail(apiKey, payload) {
   });
   if (!r.ok) throw new Error('Resend ' + r.status);
 }
-async function mail(to, subject, html) {
+async function mail(to, subject, html, attachments) {
   const { RESEND_API_KEY, FROM_EMAIL } = process.env;
   const list = (Array.isArray(to) ? to : [to]).filter(Boolean);
   if (!RESEND_API_KEY || !FROM_EMAIL || !list.length) return;
-  try { await sendEmail(RESEND_API_KEY, { from: FROM_EMAIL, to: list, subject, html }); } catch (e) {}
+  const payload = { from: FROM_EMAIL, to: list, subject, html };
+  if (attachments && attachments.length) payload.attachments = attachments;
+  try { await sendEmail(RESEND_API_KEY, payload); } catch (e) {}
 }
 // Region-routed Slack: South Africa -> #south-africa-delivery-channel, Philippines -> #philippines-delivery-channel.
 // Set per-region incoming-webhook URLs as env vars SLACK_WEBHOOK_SA / SLACK_WEBHOOK_PH (SLACK_WEBHOOK_URL is a fallback).
@@ -390,6 +392,14 @@ exports.handler = async (event) => {
       const c = (r.candidates || []).find(x => x.id === String(b.candidateId || '')); if (!c || !c.workOrder) return json(404, { error: 'no work order' });
       c.workOrder.untappedSigned = { name: String(b.name || '').slice(0, 80), title: String(b.title || 'CEO').slice(0, 80), ts: now() };
       await save(r);
+      try {
+        const dr = await fetch(reqBase.replace(/\/$/, '') + '/.netlify/functions/doc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'wo', roomId: r.id, candidateId: c.id }) });
+        const dj = await dr.json();
+        if (dj && dj.ok && dj.pdfBase64) {
+          await mail([...TEAM], `Executed Work Order — ${c.name} (${(r.client && r.client.name) || ''})`, emailWrap('Work Order fully executed', `<p style="font-size:15px;color:#333">The Work Order for <b>${esc(c.name)}</b> is now signed by both parties. A signed PDF copy is attached for your records.</p>`, roomLink(r.id)), [{ filename: dj.filename, content: dj.pdfBase64 }]);
+        }
+      } catch (e) {}
+      await slack(`:white_check_mark: *${(r.client && r.client.name) || 'Client'}* room — Work Order fully executed for ${c.name} (signed PDF emailed)  <${roomLink(r.id)}|open>`, r.region);
       return json(200, { ok: true, room: pub(r) });
     }
 
