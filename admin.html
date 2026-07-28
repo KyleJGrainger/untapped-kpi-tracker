@@ -252,7 +252,8 @@ async function openClient(id){
       <div class="row" style="margin-top:10px">
         <a class="btn ghost sm" href="/${c.region==='Philippines'?'msa-philippines.html':'msa-south-africa.html'}${(c.signed&&c.signed.company)?('?company='+encodeURIComponent(c.signed.company.name||'')+'&reg='+encodeURIComponent(c.signed.company.regNumber||'')+'&addr='+encodeURIComponent(c.signed.company.address||'')):''}" target="_blank">View MSA</a>
         ${c.msaCountersign?'':`<button class="btn sm" onclick="countersignMSA('${c.id}')" ${c.signed?'':'disabled title="client has not signed yet"'}>Counter-sign as Untapped</button>`}
-        ${(c.signed&&c.msaCountersign)?`<button class="btn ghost sm" onclick="printRecord('${c.id}','msa')">Print signed record</button>`:''}
+        ${c.signed?`<button class="btn ghost sm" onclick="dlDoc('msa','${c.id}')">⬇ Signed MSA (PDF)</button>`:''}
+        ${(c.signed&&c.msaCountersign)?`<button class="btn ghost sm" onclick="printRecord('${c.id}','msa')">Print record</button>`:''}
       </div>
     </div>
     <div class="month">Candidate shortlist</div>
@@ -294,7 +295,7 @@ function workOrderEditor(c){
         <div class="muted" style="font-size:13px;margin-top:6px">Signed by ${esc(wo.signed.name)} · ${new Date(wo.signed.ts).toLocaleString('en-GB')}</div>
         <div class="muted" style="font-size:13px;margin-top:6px">${esc(cl.companyName||'')} · Reg ${esc(cl.companyRegNumber||'')}<br>${esc(cl.companyAddress||'')}<br>Contact: ${esc(cl.contactName||'')} · ${esc(cl.hiringManagerEmail||'')}<br>Accounts: ${esc(cl.accountsEmail||'')}</div>
         <div class="muted" style="font-size:13px;margin-top:8px">Untapped: ${wo.untappedSigned?`${esc(wo.untappedSigned.name)} (${esc(wo.untappedSigned.title)}) · ${new Date(wo.untappedSigned.ts).toLocaleString('en-GB')}`:'not counter-signed'}</div>
-        <div class="row" style="margin-top:10px">${wo.untappedSigned?`<button class="btn ghost sm" onclick="printRecord('${c.id}','wo')">Print signed record</button>`:`<button class="btn sm" onclick="countersignWO('${c.id}')">Counter-sign Work Order as Untapped</button>`}</div></div>`
+        <div class="row" style="margin-top:10px">${wo.untappedSigned?`<button class="btn ghost sm" onclick="printRecord('${c.id}','wo')">Print record</button>`:`<button class="btn sm" onclick="countersignWO('${c.id}')">Counter-sign Work Order as Untapped</button>`}${wo.signed?`<button class="btn ghost sm" onclick="dlDoc('wo','${c.id}','${c.id}')">⬇ Signed WO (PDF)</button>`:''}</div></div>`
         :'<div class="muted" style="font-size:12px;margin-top:8px">Awaiting the client to add their details &amp; sign in their funnel.</div>'}
     </div>`;
 }
@@ -416,7 +417,7 @@ async function openRoom(id){
   html+= (room.candidates||[]).map(c=>{
     const w=c.workOrder; let woLine='';
     if(c.equipment){ woLine=`<div class="muted" style="font-size:12px;margin-top:6px;color:#7ee2a0">✓ Hired · WO ${w&&w.untappedSigned?'counter-signed':'signed'} · Equipment: ${esc(c.equipment.tierName||'—')}${c.equipment.option?' ('+esc(c.equipment.option)+')':''} → ${esc(c.equipment.deliveryName||'')} ${esc(c.equipment.deliveryAddress||'')}</div>`; }
-    else if(w&&w.signed){ woLine=`<div class="row" style="justify-content:space-between;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">WO signed by ${esc((w.signed.name)||'client')} · awaiting equipment sheet${w.untappedSigned?' · counter-signed ✓':''}</span>${w.untappedSigned?'':`<button class="btn ghost sm" onclick="countersignRoomWO('${id}','${c.id}')">Counter-sign WO</button>`}</div>`; }
+    else if(w&&w.signed){ woLine=`<div class="row" style="justify-content:space-between;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">WO signed by ${esc((w.signed.name)||'client')} · awaiting equipment sheet${w.untappedSigned?' · counter-signed ✓':''}</span>${w.untappedSigned?'':`<button class="btn ghost sm" onclick="countersignRoomWO('${id}','${c.id}')">Counter-sign WO</button>`}<button class="btn ghost sm" onclick="dlDoc('wo',null,'${c.id}','${id}')">⬇ Signed WO (PDF)</button></div>`; }
     else if(w){ woLine=`<div class="muted" style="font-size:12px;margin-top:6px;color:#ffb27a">WO raised · awaiting client signature</div>`; }
     else if(c.stage==='offer'){ woLine=`<div style="margin-top:6px"><button class="btn sm" onclick="raiseWOForm('${id}','${c.id}')">Raise Work Order</button></div><div id="woform_${c.id}"></div>`; }
     return `<div style="border-bottom:1px solid var(--line);padding:10px 0">
@@ -445,6 +446,7 @@ function raiseWOForm(id,cid){const el=document.getElementById('woform_'+cid);if(
 }
 async function submitRaiseWO(id,cid){const g=x=>{const e=document.getElementById(x);return e?e.value:'';};const wo={jobTitle:g('wo_jt_'+cid),startDate:g('wo_sd_'+cid),grossSalaryMonthly:g('wo_gs_'+cid),noticePeriod:g('wo_np_'+cid),tmcNote:g('wo_tmc_'+cid),jobDescription:g('wo_jd_'+cid)};const j=await roomApi('roomRaiseWO',{roomId:id,candidateId:cid,wo});toast(j.ok?'Work Order raised — client can now sign':(j.error||'Failed'));if(j.ok)openRoom(id);}
 async function countersignRoomWO(id,cid){const name=prompt('Counter-sign the Work Order as Untapped. Your name:','Kyle Grainger');if(!name)return;const title=prompt('Your title:','CEO')||'CEO';const j=await roomApi('roomCountersignWO',{roomId:id,candidateId:cid,name,title});toast(j.ok?'WO counter-signed':(j.error||'Failed'));if(j.ok)openRoom(id);}
+async function dlDoc(kind,wsId,candidateId,roomId){toast('Preparing signed PDF…');const body={kind};if(roomId){body.roomId=roomId;body.candidateId=candidateId;}else{body.wsId=wsId;if(candidateId)body.candidateId=candidateId;}try{const r=await fetch('/.netlify/functions/doc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!j||!j.ok){toast((j&&j.error)||'Failed');return;}const a=document.createElement('a');a.href='data:application/pdf;base64,'+j.pdfBase64;a.download=j.filename;document.body.appendChild(a);a.click();a.remove();toast('Downloaded');}catch(e){toast('Failed');}}
 function uploadCV(id,cid,input){const f=input.files&&input.files[0];if(!f)return;if(f.size>6*1024*1024){toast('File too big (max 6MB)');return;}const r=new FileReader();r.onload=async()=>{toast('Uploading…');const j=await api('adminUploadCV',{wsId:id,candidateId:cid,dataBase64:String(r.result)});if(j.ok){toast('CV uploaded');openClient(id);}else toast(j.error||'Upload failed');};r.readAsDataURL(f);}
 
 let cmode='new';
