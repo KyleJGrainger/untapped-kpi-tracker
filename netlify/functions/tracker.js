@@ -163,15 +163,15 @@ exports.handler = async (event) => {
       customerPin: pin(), adminPin: null, createdAt: new Date().toISOString(), commissions: [],
       onboarding: {
         required: true, selfServe: true, region,
-        retainerPerHire: 1000, hires: 1, vat: !!b.vat, depositLabel: 'deposit',
+        retainerPerHire: 1000, hires: Math.max(1, Math.round(Number(b.hires) || 1)), vat: !!b.vat, depositLabel: 'deposit',
         status: 'pending', signed: null, paid: null, questionnaireDone: false
       },
       candidates: []
     };
     await store.setJSON(wsId, ws);
-    const total = 1000 * (ws.onboarding.vat ? 1.2 : 1);
+    const total = 1000 * ws.onboarding.hires * (ws.onboarding.vat ? 1.2 : 1);
     const body = `<p style="font-size:15px;color:#333">A new prospect started self-serve onboarding.</p>
-      <p style="color:#555;font-size:14px"><b>${esc(company)}</b>${contact ? ' · ' + esc(contact) : ''}<br>${esc(email)} · ${esc(region)}<br>Deposit: £${total.toFixed(0)}${ws.onboarding.vat ? ' (inc VAT)' : ''}</p>
+      <p style="color:#555;font-size:14px"><b>${esc(company)}</b>${contact ? ' · ' + esc(contact) : ''}<br>${esc(email)} · ${esc(region)}<br>Roles: ${ws.onboarding.hires} · Deposit: £${total.toFixed(0)}${ws.onboarding.vat ? ' (inc VAT)' : ''}</p>
       <p style="color:#777;font-size:13px">They're now in the sign-terms → pay-deposit flow.</p>`;
     await mail(TEAM, `New self-serve signup — ${company}`, emailWrap('New self-serve signup', body, ws, reqBase));
     return json(200, { ok: true, wsId });
