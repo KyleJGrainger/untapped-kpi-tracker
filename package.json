@@ -4,6 +4,7 @@
   "private": true,
   "description": "Untapped cloud KPI tracker — customer workspace, candidate logging, dashboard, weekly digest.",
   "dependencies": {
-    "@netlify/blobs": "^8.2.0"
+    "@netlify/blobs": "^8.2.0",
+    "pdf-lib": "^1.17.1"
   }
 }
