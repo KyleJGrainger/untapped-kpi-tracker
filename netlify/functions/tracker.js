@@ -346,6 +346,44 @@ exports.handler = async (event) => {
     await store.setJSON(wsId, ws);
     return json(200, { ok: true, wsId, clientPin, existing, candidatePin: candidates[0] ? candidates[0].candidatePin : null, team: candidates.map(c => ({ name: c.name, candidatePin: c.candidatePin })) });
   }
+  // Existing client starts ANOTHER hiring project. MSA already in force, so terms are
+  // waived and the client is dropped straight into the pay-deposit → questionnaire →
+  // kick-off call → candidate presentation flow, in a fresh project workspace.
+  if (action === 'adminNewProject') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const parent = await store.get(String(b.fromWsId || ''), { type: 'json' });
+    if (!parent) return json(404, { error: 'client not found' });
+    const po = parent.onboarding || {};
+    const region = ['Philippines', 'South Africa'].includes(b.region) ? b.region : (po.region || null);
+    if (!region) return json(400, { error: 'no region set for this client — set a region first' });
+    const hires = Math.max(1, Math.round(Number(b.hires) || 1));
+    const vat = !!b.vat;
+    const projectName = String(b.projectName || '').trim().slice(0, 80);
+    const wsId = uid();
+    const gen = () => String(Math.floor(1000 + Math.random() * 9000));
+    const now = new Date().toISOString();
+    const ws = {
+      id: wsId, company: parent.company + (projectName ? (' — ' + projectName) : ''),
+      customerEmail: parent.customerEmail || '', contactName: parent.contactName || '',
+      customerPin: gen(), adminPin: null, createdAt: now, commissions: [],
+      onboarding: {
+        required: true, newProject: true, parentWsId: parent.id, projectName: projectName || null,
+        region, retainerPerHire: 1000, hires, vat, depositLabel: 'deposit', selfServe: false,
+        status: 'paid', // stage machine: signed but not paid → next step is "pay"
+        // terms already covered by the client's existing Master Services Agreement
+        signed: { name: '(covered by existing Master Services Agreement)', ts: now, waivedUnderMSA: true, company: (po.signed && po.signed.company) || null },
+        paid: null, questionnaireDone: false, booked: false, hired: false, woDone: false, ddDone: false, sentAt: now
+      },
+      candidates: []
+    };
+    await store.setJSON(wsId, ws);
+    const total = 1000 * hires * (vat ? 1.2 : 1);
+    const body = `<p style="font-size:15px;color:#333">A new hiring project was created for an existing client.</p>
+      <p style="color:#555;font-size:14px"><b>${esc(ws.company)}</b><br>${esc(ws.customerEmail || '')} · ${esc(region)}<br>Roles: ${hires} · Deposit: £${total.toFixed(0)}${vat ? ' (inc VAT)' : ''}</p>
+      <p style="color:#777;font-size:13px">Terms waived under the existing MSA — the client starts at the pay-deposit step.</p>`;
+    await mail(TEAM, `New hiring project — ${ws.company}`, emailWrap('New hiring project', body, ws, reqBase));
+    return json(200, { ok: true, wsId, clientPin: ws.customerPin });
+  }
   if (action === 'adminDeleteClient') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     const w = await store.get(b.wsId, { type: 'json' });
