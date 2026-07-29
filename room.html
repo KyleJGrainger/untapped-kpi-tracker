@@ -274,8 +274,11 @@ function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return
   const cvUrl='/.netlify/functions/cv?w='+encodeURIComponent(ROOM_ID)+'&c='+encodeURIComponent(id);
   const stages=ROOM.stages||[]; const ci=stages.findIndex(s=>s.id===c.stage); const curLabel=(stages[ci]||{}).label||'—'; const fwd=stages.slice(ci+1);
   const region=ROOM.region; const sal=Number(c.salary)||0; let costRows;
-  if(sal>0){const pct=region==='Philippines'?0.35:0.25,fee=region==='Philippines'?150:325,flabel=region==='Philippines'?'Payroll':'EOR',svc=sal*pct,total=sal+svc+fee;
-    costRows=`<div class="kv"><span class="k">Base salary</span><span>${money(sal)}/mo</span></div><div class="kv"><span class="k">Untapped service charge (${Math.round(pct*100)}%)</span><span>${money(Math.round(svc))}/mo</span></div><div class="kv"><span class="k">${flabel} &amp; compliance</span><span>${money(fee)}/mo</span></div><div class="kv"><span class="k" style="color:#fff;font-weight:700">Total monthly (all-in)</span><span style="color:var(--gold);font-weight:700">${money(Math.round(total))}/mo</span></div>`;
+  if(sal>0){const pct=region==='Philippines'?0.35:0.25,fee=region==='Philippines'?150:325,flabel=region==='Philippines'?'Payroll':'EOR',svc=sal*pct,total=sal+svc+fee+sal*0.05;
+    const statRow=(l,p)=>`<div class="kv"><span class="k" style="font-size:12px">${l} (${p}%)</span><span>${money(Math.round(sal*p/100))}/mo</span></div>`;
+    costRows=`<div class="kv"><span class="k">Base salary</span><span>${money(sal)}/mo</span></div><div class="kv"><span class="k">Untapped service charge (${Math.round(pct*100)}%)</span><span>${money(Math.round(svc))}/mo</span></div><div class="kv"><span class="k">${flabel} &amp; compliance</span><span>${money(fee)}/mo</span></div>`+
+      statRow('Unemployment Insurance Fund (UIF)',1)+statRow('Skills Development Levy (SDL)',1)+statRow('End of Service Compensation (ESC)',1)+statRow('Fixed Currency Exchange (FCE)',2)+
+      `<div class="kv"><span class="k" style="color:#fff;font-weight:700">Total monthly (all-in)</span><span style="color:var(--gold);font-weight:700">${money(Math.round(total))}/mo</span></div>`;
   } else { costRows=`<div class="kv"><span class="k">Monthly cost (all-in)</span><span style="color:var(--gold);font-weight:700">${money(c.cost)}/mo</span></div>`; }
   const d=document.getElementById('dpad');
   d.innerHTML=`<button class="dclose" onclick="closeD()" title="Close">×</button>
@@ -328,7 +331,7 @@ const EQUIP_TIERS=[
  {id:'premium',name:'Premium',roles:'Exec, Engineer, Senior Management',ex:'Dell XPS / ThinkPad (Core Ultra 7), MacBook Pro',lease:'£120–£170/mo',buy:'£1,300–£2,170'}
 ];
 function woHtml(c){const w=c.workOrder;
-  if(w && !w.signed){const mc=w.grossSalaryMonthly?Math.round(ROOM.region==='Philippines'?w.grossSalaryMonthly*1.35+150:w.grossSalaryMonthly*1.25+325):c.cost;
+  if(w && !w.signed){const mc=w.grossSalaryMonthly?Math.round(ROOM.region==='Philippines'?w.grossSalaryMonthly*1.40+150:w.grossSalaryMonthly*1.30+325):c.cost;
     return `<div class="card" style="margin:14px 0;border-color:var(--gold)">
       <div class="lbl" style="color:var(--gold)">WORK ORDER — REVIEW &amp; SIGN</div><div class="rule"></div>
       <div class="kv"><span class="k">Role</span><span>${esc(w.jobTitle)}</span></div>

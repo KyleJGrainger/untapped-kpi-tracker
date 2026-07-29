@@ -229,7 +229,7 @@ async function openClient(id){
         <div><b style="font-size:16px">${esc(cand.name)}</b>${cand.commentary?`<div class="muted" style="font-size:13px;margin-top:3px">“${esc(cand.commentary)}”</div>`:''}</div>
         <div class="row">${(c.hired&&c.hired.candidateId===cand.id)?'<span class="badge b-active">★ Hired</span>':`<button class="btn sm" onclick="setHired('${c.id}','${cand.id}')">Mark as hired</button>`}<button class="btn ghost sm" style="border-color:#DA291C;color:#ff8a80" onclick="removeCand('${c.id}','${cand.id}')">Remove</button></div>
       </div>
-      <div style="margin-top:10px;font-size:14px" class="muted">Salary £${(cand.salary||0).toLocaleString('en-GB')}/mo → service charge ${Math.round(cand.pct*100)}% + ${esc(cand.feeLabel)} £${cand.fee} → <b style="color:#fff">client sees £${(cand.totalCost||0).toLocaleString('en-GB',{maximumFractionDigits:0})}/mo</b></div>
+      <div style="margin-top:10px;font-size:14px" class="muted">Salary £${(cand.salary||0).toLocaleString('en-GB')}/mo → service charge ${Math.round(cand.pct*100)}% + ${esc(cand.feeLabel)} £${cand.fee} + 5% statutory (UIF/SDL/ESC/FCE) → <b style="color:#fff">client sees £${(cand.totalCost||0).toLocaleString('en-GB',{maximumFractionDigits:0})}/mo</b></div>
       <div class="grid2" style="margin-top:10px">
         <div><label class="fl">Update salary (£/mo)</label><input type="number" min="0" step="50" id="sal_${cand.id}" value="${cand.salary||0}"></div>
         <div style="display:flex;align-items:flex-end;gap:8px">
