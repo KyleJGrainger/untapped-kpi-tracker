@@ -182,6 +182,22 @@ function kanbanCard(c){
     <div class="muted" style="font-size:11px;margin-top:5px">${c.signed?('MSA signed '+new Date(c.signed.ts).toLocaleDateString('en-GB')):'Sent '+(c.sentAt?new Date(c.sentAt).toLocaleDateString('en-GB'):'—')}</div>
   </div>`;
 }
+async function newProject(id){
+  const hires=Math.max(1,parseInt(($('#np_hires').value||'1'),10));
+  const vat=$('#np_vat').checked; const projectName=$('#np_name').value.trim();
+  const err=$('#np_err'); err.textContent='';
+  const j=await api('adminNewProject',{fromWsId:id,hires,vat,projectName});
+  if(!j.ok){err.textContent=j.error||'Failed';return;}
+  const link=location.origin+'/?w='+j.wsId;
+  $('#np_out').innerHTML=`<div class="card" style="margin-top:12px;background:#0d0f14">
+    <b style="font-size:14px;color:#7ee2a0">✓ New hiring project created</b>
+    <div class="muted" style="font-size:12px;margin-top:8px">Send this link to the client — it opens at the deposit step:</div>
+    <div class="row" style="align-items:center;gap:8px;margin-top:6px"><input readonly value="${link}" style="flex:1;font-size:12px" onclick="this.select()"><button class="btn ghost sm" onclick="copy('${link}')">Copy link</button></div>
+    <div class="muted" style="font-size:12px;margin-top:10px">Client dashboard PIN (revealed to them after they finish the flow): <b style="color:#fff;letter-spacing:.15em">${esc(j.clientPin)}</b></div>
+    <a class="btn ghost sm" style="margin-top:10px;display:inline-block" href="${link}" target="_blank">Open the client link ↗</a>
+  </div>`;
+  toast('New hiring project created');
+}
 async function deleteClientAdmin(id){
   if(!confirm('Permanently delete this client and ALL their data (candidates, CVs, signatures)? This cannot be undone.'))return;
   const j=await api('adminDeleteClient',{wsId:id});
@@ -229,6 +245,18 @@ async function openClient(id){
     <h1 style="font-size:23px;margin:6px 0 2px">${esc(c.company)}</h1>
     <p class="muted" style="font-size:13px">${esc(c.region||'—')} · retainer £${((c.vat?c.retainerPerHire*c.hires*1.2:c.retainerPerHire*c.hires)||0).toFixed(0)} · <a href="${location.origin+'/?w='+c.id}" target="_blank" style="color:#ffb27a">client link ↗</a></p>
     <div style="margin:12px 0">${step(!!c.signed,'MSA signed')}${step(!!c.paid,'Retainer paid')}${step(!!c.questionnaireDone,'Questionnaire')}${step(!!c.booked,'Kick-off booked')}${step(!!c.hired,'Hired')}${step(!!c.woDone,'Work Order')}${step(!!c.ddDone,'Direct Debit')}</div>
+    ${(c.existingClient||c.signed)?`<div class="month">New hiring project</div>
+    <div class="card" id="np_card">
+      <p class="muted" style="font-size:13px;margin:0 0 10px">MSA already in force — start another hiring project for this client. Terms are skipped; the client's link opens at the deposit step, then kick-off questionnaire → call → candidate shortlist.</p>
+      <div class="grid2">
+        <div><label class="fl">Project name (optional)</label><input id="np_name" placeholder="e.g. Q3 Support Team"></div>
+        <div><label class="fl">Number of roles</label><input id="np_hires" type="number" min="1" step="1" value="1"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px" class="muted"><input type="checkbox" id="np_vat"> Add VAT (20%) to the deposit</label>
+      <div class="err" id="np_err"></div>
+      <button class="btn sm" style="margin-top:10px" onclick="newProject('${c.id}')">Create new hiring project →</button>
+      <div id="np_out"></div>
+    </div>`:''}
     <div class="month">Collaboration room</div>
     <div class="card" id="roomlinkcard">${roomPanelHTML(c)}</div>
     <div class="month">Access PINs</div>
