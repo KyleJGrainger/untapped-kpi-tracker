@@ -245,8 +245,8 @@ exports.handler = async (event) => {
     const { blobs } = await store.list();
     const clients = [];
     for (const bl of blobs) {
-      if (bl.key === '__config') continue;
-      const w = await store.get(bl.key, { type: 'json' }); if (!w) continue;
+      if (bl.key === '__config' || bl.key.includes(':')) continue;
+      const w = await store.get(bl.key, { type: 'json' }); if (!w || w.deleted) continue;
       const o = w.onboarding || {};
       const per = Number(o.retainerPerHire) || 0, hires = Number(o.hires) || 1;
       const total = o.vat ? per * hires * 1.2 : per * hires;
@@ -392,14 +392,68 @@ exports.handler = async (event) => {
     await mail(TEAM, `New hiring project — ${ws.company}`, emailWrap('New hiring project', body, ws, reqBase));
     return json(200, { ok: true, wsId, clientPin: ws.customerPin });
   }
+  // SOFT delete — moves the client to Trash (recoverable). Data is NOT erased; it is flagged
+  // and hidden from the main list. A separate purge (from Trash) does the permanent removal.
   if (action === 'adminDeleteClient') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const w = await store.get(b.wsId, { type: 'json' });
+    if (!w) return json(404, { error: 'not found' });
+    w.deleted = { at: new Date().toISOString(), by: 'admin (shared PIN)' };
+    await store.setJSON(b.wsId, w);
+    return json(200, { ok: true, softDeleted: true });
+  }
+  // List trashed clients (and opportunistically purge anything trashed > 30 days ago).
+  if (action === 'adminListTrash') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const { blobs } = await store.list();
+    const rows = [];
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    for (const bl of blobs) {
+      if (bl.key === '__config' || bl.key.includes(':')) continue;
+      const w = await store.get(bl.key, { type: 'json' }); if (!w || !w.deleted) continue;
+      const when = new Date(w.deleted.at).getTime() || 0;
+      if (when && when < cutoff) { // auto-purge after 30 days
+        try { for (const c of ((w.onboarding && w.onboarding.shortlist) || [])) { await store.delete('cv:' + w.id + ':' + c.id); } } catch (e) {}
+        await store.delete(bl.key); continue;
+      }
+      rows.push({ id: w.id, company: w.company || '', region: (w.onboarding || {}).region || null, deletedAt: w.deleted.at, deletedBy: w.deleted.by || '' });
+    }
+    rows.sort((a, b2) => String(b2.deletedAt || '').localeCompare(String(a.deletedAt || '')));
+    return json(200, { ok: true, trash: rows });
+  }
+  if (action === 'adminRestoreClient') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'not found' });
+    delete w.deleted; await store.setJSON(b.wsId, w);
+    return json(200, { ok: true, restored: true });
+  }
+  // Permanent removal — only reachable from the Trash view, requires typed confirmation.
+  if (action === 'adminPurgeClient') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    if (b.confirm !== 'DELETE') return json(400, { error: 'confirmation required' });
     const w = await store.get(b.wsId, { type: 'json' });
     if (w && w.onboarding && Array.isArray(w.onboarding.shortlist)) {
       for (const c of w.onboarding.shortlist) { try { await store.delete('cv:' + b.wsId + ':' + c.id); } catch (e) {} }
     }
     await store.delete(b.wsId);
-    return json(200, { ok: true, deleted: true });
+    return json(200, { ok: true, purged: true });
+  }
+  // Read-only storage snapshot — shows exactly what is in the blob store (for integrity checks).
+  if (action === 'adminDiagnostics') {
+    if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
+    const { blobs } = await store.list();
+    let workspaces = 0, deleted = 0, rooms = 0, cvs = 0, other = 0;
+    const clients = [];
+    for (const bl of blobs) {
+      if (bl.key === '__config') { other++; continue; }
+      if (bl.key.startsWith('room:')) { rooms++; continue; }
+      if (bl.key.startsWith('cv:')) { cvs++; continue; }
+      const w = await store.get(bl.key, { type: 'json' });
+      if (w && w.company !== undefined) { workspaces++; if (w.deleted) deleted++; clients.push({ company: w.company || '(no name)', createdAt: w.createdAt || null, deleted: !!w.deleted }); }
+      else other++;
+    }
+    clients.sort((a, b2) => String(b2.createdAt || '').localeCompare(String(a.createdAt || '')));
+    return json(200, { ok: true, totals: { totalBlobs: blobs.length, workspaces, active: workspaces - deleted, trashed: deleted, rooms, cvs, other }, clients });
   }
   // ---- Admin: manage a specific client's candidate shortlist ----
   if (action === 'adminGetClient' || action === 'adminAddCandidate' || action === 'adminUpdateCandidate'
@@ -757,8 +811,9 @@ exports.handler = async (event) => {
   if (action === 'deleteWorkspace') {
     if (!isAdmin) return json(403, { error: 'admin only' });
     if (String(b.confirm) !== 'DELETE') return json(400, { error: 'confirmation required' });
-    await store.delete(wsId);
-    return json(200, { ok: true, deleted: true });
+    ws.deleted = { at: new Date().toISOString(), by: 'client admin' }; // soft delete — recoverable from Trash
+    await save();
+    return json(200, { ok: true, softDeleted: true });
   }
   if (action === 'addCommission') {
     if (!isManager) return json(403, { error: 'forbidden' });
