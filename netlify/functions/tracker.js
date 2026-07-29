@@ -17,12 +17,20 @@ const TEAM = ['kyle@tryuntapped.com', 'Nina@tryuntapped.com', 'pau@tryuntapped.c
 const VA = 'pau@tryuntapped.com';
 const DELIVERY = { 'South Africa': 'Ruan.Stander@tryuntapped.com', 'Philippines': 'Diana@tryuntapped.com' };
 const KICKOFF = { 'South Africa': 'https://my.recruitwithatlas.com/tryuntappedcom/Ruan-Stander/Kickoff-Call', 'Philippines': 'https://my.recruitwithatlas.com/tryuntappedcom/Diana-Rose-Ariaso/Kickoff-Call' };
-// Cost engine: total monthly £ the client sees = salary + service charge % + fixed EOR/payroll fee.
+// Cost engine: total monthly £ the client sees = salary + service charge % + fixed EOR/payroll fee
+// + statutory/compliance charges (UIF 1% + SDL 1% + ESC 1% + FCE 2% = 5% of gross). Matches the Work Order.
+const STAT_CHARGES = [
+  { key: 'UIF', label: 'Unemployment Insurance Fund (UIF)', pct: 0.01 },
+  { key: 'SDL', label: 'Skills Development Levy (SDL)', pct: 0.01 },
+  { key: 'ESC', label: 'End of Service Compensation Accrual (ESC)', pct: 0.01 },
+  { key: 'FCE', label: 'Fixed Currency Exchange (FCE)', pct: 0.02 }
+];
 function costOf(salary, region) {
   const s = Math.max(0, Number(salary) || 0);
-  if (region === 'South Africa') return { pct: 0.25, fee: 325, feeLabel: 'EOR', total: s * 1.25 + 325 };
-  if (region === 'Philippines') return { pct: 0.35, fee: 150, feeLabel: 'Payroll', total: s * 1.35 + 150 };
-  return { pct: 0, fee: 0, feeLabel: '', total: s };
+  const statTotal = s * 0.05, stat = STAT_CHARGES;
+  if (region === 'South Africa') return { pct: 0.25, fee: 325, feeLabel: 'EOR', stat, statTotal, total: s * 1.25 + 325 + statTotal };
+  if (region === 'Philippines') return { pct: 0.35, fee: 150, feeLabel: 'Payroll', stat, statTotal, total: s * 1.35 + 150 + statTotal };
+  return { pct: 0, fee: 0, feeLabel: '', stat, statTotal, total: s + statTotal };
 }
 const HOLIDAYS = {
   'South Africa': { '2026-01-01':"New Year's Day",'2026-03-21':'Human Rights Day','2026-04-03':'Good Friday','2026-04-06':'Family Day','2026-04-27':'Freedom Day','2026-05-01':"Workers' Day",'2026-06-16':'Youth Day','2026-08-10':"National Women's Day (observed)",'2026-09-24':'Heritage Day','2026-12-16':'Day of Reconciliation','2026-12-25':'Christmas Day','2026-12-26':'Day of Goodwill' },
