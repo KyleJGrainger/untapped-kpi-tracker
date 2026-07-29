@@ -151,6 +151,7 @@ function esc(s){return String(s==null?'':s).replace(/[&<>]/g,c=>({"&":"&amp;","<
 function stars(n){n=Number(n)||0;if(n<1)return '';return "★★★★★".slice(0,n)}
 function isBlank(v){return v==null||v===''||v==='—'||v==='-'}
 function money(n){return "£"+(Number(n)||0).toLocaleString()}
+function roomTotal(c){const s=Number(c.salary)||0;if(s<=0)return Number(c.cost)||0;const ph=ROOM&&ROOM.region==='Philippines';const pct=ph?0.35:0.25,fee=ph?150:325;return Math.round(s*(1+pct+0.05)+fee);}
 
 async function boot(){
   VIEWER=lget('untapped_room_viewer_'+ROOM_ID);
@@ -233,7 +234,7 @@ function card(c){return `<div class="card" draggable="true" ondragstart="event.d
   <div style="display:flex;gap:8px;align-items:center">${photoOrInitials(c,34)}<div class="nm" style="line-height:1.2">${esc(c.name)}<br><span class="stars" title="Untapped delivery lead's rating">${stars(c.rating)}</span></div></div>
   <div class="hl" style="margin-top:6px">${esc(c.headline||'Recruitment consultant')}</div>
   ${(c.niche||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}
-  <div class="cost">${money(c.cost)}/mo</div></div>`;}
+  <div class="cost">${money(roomTotal(c))}/mo</div></div>`;}
 async function move(id,stage){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c||c.stage===stage)return;
   const stages=ROOM.stages||[]; const from=stages.findIndex(s=>s.id===c.stage), to=stages.findIndex(s=>s.id===stage);
   const lbl=(stages[to]||{}).label;
