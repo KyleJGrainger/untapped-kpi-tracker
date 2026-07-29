@@ -115,7 +115,7 @@ async function clientsView(){
   if(!cl.length){box.innerHTML='<div class="empty">No clients yet. Use “+ New client” to set one up.</div>';return;}
   const head=`<div class="row" style="justify-content:space-between;align-items:center;margin:2px 0 12px">
       <p class="muted" style="font-size:14px;margin:0"><b style="color:#fff">${cl.length}</b> client${cl.length===1?'':'s'} · <b style="color:#ff8a80">${outstanding}</b> outstanding MSA${outstanding===1?'':'s'}</p>
-      <div class="row"><button class="btn ghost sm ${clientView_mode==='board'?'':''}" onclick="setMode('board')" style="${clientView_mode==='board'?'border-color:#FFC600;color:#fff':''}">Board</button><button class="btn ghost sm" onclick="setMode('months')" style="${clientView_mode==='months'?'border-color:#FFC600;color:#fff':''}">By month</button><button class="btn ghost sm" onclick="payoutsView()">⬇ Wise payouts (PH)</button><button class="btn ghost sm" style="border-color:#DA291C;color:#ff8a80" onclick="clearAllClients()">Clear all</button></div>
+      <div class="row"><button class="btn ghost sm ${clientView_mode==='board'?'':''}" onclick="setMode('board')" style="${clientView_mode==='board'?'border-color:#FFC600;color:#fff':''}">Board</button><button class="btn ghost sm" onclick="setMode('months')" style="${clientView_mode==='months'?'border-color:#FFC600;color:#fff':''}">By month</button><button class="btn ghost sm" onclick="payoutsView()">⬇ Wise payouts (PH)</button><button class="btn ghost sm" onclick="trashView()">🗑 Trash</button><button class="btn ghost sm" onclick="diagnosticsView()">Storage check</button></div>
     </div>`;
   if(clientView_mode==='months'){
     const groups={}; cl.forEach(c=>{const m=monthKey(c.sentAt);(groups[m]=groups[m]||[]).push(c);});
@@ -176,7 +176,7 @@ async function savePayoutsAndExport(){
 }
 function kanbanCard(c){
   return `<div class="card" style="padding:12px;margin-bottom:10px;cursor:pointer;position:relative" onclick="openClient('${c.id}')">
-    <button title="Delete client" onclick="event.stopPropagation();deleteClientAdmin('${c.id}')" style="position:absolute;top:6px;right:8px;background:none;border:0;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px">×</button>
+    <button title="Move to Trash" onclick="event.stopPropagation();deleteClientAdmin('${c.id}','${encodeURIComponent(c.company||'')}')" style="position:absolute;top:6px;right:8px;background:none;border:0;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px">×</button>
     <b style="font-size:14px;display:block;padding-right:16px">${esc(c.company||'—')}</b>
     <div class="muted" style="font-size:12px;margin-top:3px">${esc(c.region||'no region')} · £${(c.retainerTotal||0).toFixed(0)}/mo</div>
     <div class="muted" style="font-size:11px;margin-top:5px">${c.signed?('MSA signed '+new Date(c.signed.ts).toLocaleDateString('en-GB')):'Sent '+(c.sentAt?new Date(c.sentAt).toLocaleDateString('en-GB'):'—')}</div>
@@ -198,10 +198,31 @@ async function newProject(id){
   </div>`;
   toast('New hiring project created');
 }
-async function deleteClientAdmin(id){
-  if(!confirm('Permanently delete this client and ALL their data (candidates, CVs, signatures)? This cannot be undone.'))return;
+async function deleteClientAdmin(id,encName){
+  const name=encName?decodeURIComponent(encName):'this client';
+  if(!confirm('Move “'+name+'” to Trash?\n\nIt will be recoverable from Trash for 30 days, then permanently removed. Nothing is erased immediately.'))return;
   const j=await api('adminDeleteClient',{wsId:id});
-  if(j.ok){toast('Client deleted');clientsView();}else toast(j.error||'Failed');
+  if(j.ok){toast('Moved to Trash');clientsView();}else toast(j.error||'Failed');
+}
+async function trashView(){
+  view='trash';$('#topr').innerHTML=`<button class="btn ghost sm" onclick="lock()">Lock</button>`;
+  el.innerHTML=`<button class="tab" onclick="go('clients')">← Back to clients</button><div id="body"><div class="empty">Loading…</div></div>`;
+  const j=await api('adminListTrash');const box=$('#body');
+  if(!j.ok){box.innerHTML='<div class="empty">'+(j.error||'Failed')+'</div>';return;}
+  const t=j.trash||[];
+  const head='<h1 style="font-size:22px;margin:6px 0 2px">Trash</h1><p class="muted" style="font-size:13px;margin:0 0 12px">Deleted clients are recoverable here for 30 days, then permanently removed.</p>';
+  if(!t.length){box.innerHTML=head+'<div class="empty">Trash is empty.</div>';return;}
+  box.innerHTML=head+t.map(c=>`<div class="client"><div><b>${esc(c.company||'—')}</b> <span class="muted">· ${esc(c.region||'—')}</span><div class="muted" style="font-size:12px;margin-top:3px">Deleted ${new Date(c.deletedAt).toLocaleString('en-GB')}${c.deletedBy?' · '+esc(c.deletedBy):''}</div></div><div class="row"><button class="btn sm" onclick="restoreClient('${c.id}')">↩ Restore</button><button class="btn ghost sm" style="border-color:#DA291C;color:#ff8a80" onclick="purgeClient('${c.id}','${encodeURIComponent(c.company||'')}')">Delete permanently</button></div></div>`).join('');
+}
+async function restoreClient(id){const j=await api('adminRestoreClient',{wsId:id});if(j.ok){toast('Restored to clients');trashView();}else toast(j.error||'Failed');}
+async function purgeClient(id,encName){const name=encName?decodeURIComponent(encName):'this client';if(!confirm('Permanently delete “'+name+'”? This cannot be undone.'))return;const t=prompt('Type DELETE to permanently remove '+name+'.');if(t!=='DELETE'){if(t!==null)toast('Not deleted — you must type DELETE');return;}const j=await api('adminPurgeClient',{wsId:id,confirm:'DELETE'});if(j.ok){toast('Permanently deleted');trashView();}else toast(j.error||'Failed');}
+async function diagnosticsView(){
+  toast('Checking storage…');
+  const j=await api('adminDiagnostics');
+  if(!j.ok){toast(j.error||'Failed');return;}
+  const t=j.totals;
+  const lines=(j.clients||[]).map(c=>`${c.deleted?'🗑 ':'• '}${c.company}${c.createdAt?'  ('+new Date(c.createdAt).toLocaleDateString('en-GB')+')':''}`).join('\n');
+  alert('STORAGE CHECK\n\nClient workspaces: '+t.workspaces+'  (active '+t.active+', in trash '+t.trashed+')\nRooms: '+t.rooms+'   CVs: '+t.cvs+'   Other: '+t.other+'\nTotal records in store: '+t.totalBlobs+'\n\nEvery client currently in the store:\n'+(lines||'(none found)'));
 }
 function clientRow(c){
   const st=STAGES[c.stage]||['—','b-mid']; const base=location.origin+'/?w='+c.id;
