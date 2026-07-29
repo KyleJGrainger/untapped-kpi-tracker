@@ -190,18 +190,22 @@ exports.handler = async (event) => {
         const st = (r.stages || []).find(s => s.id === String(b.stage || ''));
         if (!st) return json(400, { error: 'bad stage' });
         c.stage = st.id;
+        // moving a candidate back onto the board un-archives them
+        if (c.archived) { c.archived = false; if (c.decision === 'Passed') c.decision = null; if (c.declineReason) c.declineReason.restoredAt = now(); }
         text = `${who} moved ${c.name} → ${st.label}`;
       } else {
         const label = String(b.actionLabel || 'updated');
         c.decision = label;
         if (/interview/i.test(label)) c.stage = /2nd|second/i.test(label) ? 'second' : 'interview';
         if (/offer/i.test(label)) c.stage = 'offer';
-        if (/pass|reject|not for us/i.test(label)) {
+        if (/pass|reject|not for us|withdrew|withdrawn/i.test(label)) {
           c.decision = 'Passed';
+          c.archived = true; // drops out of the active board into the archive
           const reason = String(b.reason || '').slice(0, 120);
           const note = String(b.note || '').slice(0, 600);
-          c.declineReason = { reason, note, stage: c.stage, ts: now() };
-          text = `${who} declined ${c.name}${reason ? ' — ' + reason : ''}${note ? ' (“' + note + '”)' : ''}`;
+          const stageLabel = ((r.stages || []).find(s => s.id === c.stage) || {}).label || c.stage;
+          c.declineReason = { reason, note, stage: c.stage, stageLabel, by: who, ts: now() };
+          text = `${who} declined ${c.name}${reason ? ' — ' + reason : ''} (at ${stageLabel})${note ? ' (“' + note + '”)' : ''}`;
         } else {
           text = `${who}: ${label} — ${c.name}`;
         }
@@ -214,6 +218,22 @@ exports.handler = async (event) => {
       const body = `<p style="font-size:15px;color:#333">${esc(text)}</p><p style="color:#777;font-size:13px">Room: ${esc(r.role)} · ${esc(r.client.name)}${cc ? ' · for: ' + esc(cc) : ''}. Update Atlas to match.</p>`;
       await mail([...TEAM], `Room · ${r.client.name} — ${text}`, emailWrap('Client activity', body, roomLink(r.id)));
       await slack(`:busts_in_silhouette: *${r.client.name}* room — ${text}${cc ? '  ·  cc: ' + cc : ''}  <${roomLink(r.id)}|open>`, r.region);
+      return json(200, { ok: true, room: pub(r) });
+    }
+
+    if (action === 'roomArchiveFeedback') {
+      const r = await load(String(b.roomId || ''));
+      if (!r) return json(404, { error: 'room not found' });
+      const c = (r.candidates || []).find(x => x.id === String(b.candidateId || ''));
+      if (!c) return json(404, { error: 'candidate not found' });
+      const who = String(b.viewer || (r.client && r.client.contactName) || 'Client');
+      c.declineReason = c.declineReason || {};
+      c.declineReason.clientFeedback = String(b.feedback || '').slice(0, 800);
+      r.activity = r.activity || [];
+      r.activity.unshift({ ts: now(), who, text: `${who} added archive feedback on ${c.name}` });
+      r.activity = r.activity.slice(0, 200);
+      await save(r);
+      await slack(`:memo: *${r.client.name}* room — ${who} added archive feedback on ${c.name}  <${roomLink(r.id)}|open>`, r.region);
       return json(200, { ok: true, room: pub(r) });
     }
 
