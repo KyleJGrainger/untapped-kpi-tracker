@@ -89,6 +89,10 @@ header.top img{height:34px;display:block}
 .avatar{width:66px;height:66px;border-radius:12px;background:linear-gradient(135deg,#3a2a10,#2b333d);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:26px;color:var(--gold);font-weight:700;border:1px solid var(--line)}
 .kv{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:8px 0;font-size:13px}
 .kv .k{color:var(--muted)}
+.statrow{border-bottom:1px solid var(--line);padding:8px 0}
+.statmain{display:flex;justify-content:space-between;font-size:13px}
+.statmain span:first-child{color:var(--muted)}
+.statnote{font-size:10px;color:#6f7b86;margin-top:3px;line-height:1.4;max-width:95%}
 .acts{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0}
 .exp{font-size:12.5px;color:#cdd6df;padding:6px 0;border-bottom:1px solid var(--line)}
 .exp .c{color:var(--muted);font-size:11.5px}
@@ -276,9 +280,12 @@ function openD(id){const c=(ROOM.candidates||[]).find(x=>x.id===id);if(!c)return
   const stages=ROOM.stages||[]; const ci=stages.findIndex(s=>s.id===c.stage); const curLabel=(stages[ci]||{}).label||'—'; const fwd=stages.slice(ci+1);
   const region=ROOM.region; const sal=Number(c.salary)||0; let costRows;
   if(sal>0){const pct=region==='Philippines'?0.35:0.25,fee=region==='Philippines'?150:325,flabel=region==='Philippines'?'Payroll':'EOR',svc=sal*pct,total=sal+svc+fee+sal*0.05;
-    const statRow=(l,p)=>`<div class="kv"><span class="k" style="font-size:12px">${l} (${p}%)</span><span>${money(Math.round(sal*p/100))}/mo</span></div>`;
+    const statRow=(l,p,d)=>`<div class="statrow"><div class="statmain"><span>${l} (${p}%)</span><span>${money(Math.round(sal*p/100))}/mo</span></div><div class="statnote">${d}</div></div>`;
     costRows=`<div class="kv"><span class="k">Base salary</span><span>${money(sal)}/mo</span></div><div class="kv"><span class="k">Untapped service charge (${Math.round(pct*100)}%)</span><span>${money(Math.round(svc))}/mo</span></div><div class="kv"><span class="k">${flabel} &amp; compliance</span><span>${money(fee)}/mo</span></div>`+
-      statRow('Unemployment Insurance Fund (UIF)',1)+statRow('Skills Development Levy (SDL)',1)+statRow('End of Service Compensation (ESC)',1)+statRow('Fixed Currency Exchange (FCE)',2)+
+      statRow('Unemployment Insurance Fund (UIF)',1,'Statutory contribution to the Unemployment Insurance Fund, providing short-term income cover for the employee if they lose their job.')+
+      statRow('Skills Development Levy (SDL)',1,'Statutory levy that funds ongoing employee training and skills development.')+
+      statRow('End of Service Compensation (ESC)',1,'A monthly accrual set aside towards end-of-service / severance obligations, so the liability is funded gradually rather than in one lump sum.')+
+      statRow('Fixed Currency Exchange (FCE)',2,'Covers currency conversion and protects your fixed monthly cost against GBP exchange-rate movement.')+
       `<div class="kv"><span class="k" style="color:#fff;font-weight:700">Total monthly (all-in)</span><span style="color:var(--gold);font-weight:700">${money(Math.round(total))}/mo</span></div>`;
   } else { costRows=`<div class="kv"><span class="k">Monthly cost (all-in)</span><span style="color:var(--gold);font-weight:700">${money(c.cost)}/mo</span></div>`; }
   const d=document.getElementById('dpad');
