@@ -138,6 +138,8 @@ exports.handler = async (event) => {
 
   const { action } = b;
   const isAdmin = () => store.get('__config', { type: 'json' }).then(c => !!(c && c.adminKey && String(b.adminKey || '') === String(c.adminKey)));
+  // machine writes (the scheduled Atlas sync) authenticate with SYNC_TOKEN instead of the admin PIN
+  const canWrite = async () => (await isAdmin()) || (!!process.env.SYNC_TOKEN && String(b.syncToken || '') === String(process.env.SYNC_TOKEN));
 
   try {
     // ---------- client-facing ----------
@@ -281,7 +283,7 @@ exports.handler = async (event) => {
 
     // ---------- admin / agent (Atlas sync) ----------
     if (action === 'roomUpsert') {
-      if (!(await isAdmin())) return json(403, { error: 'admin only' });
+      if (!(await canWrite())) return json(403, { error: 'admin only' });
       const incoming = b.room;
       if (!incoming || !incoming.id) return json(400, { error: 'room payload required' });
       const existing = await store.get(key(incoming.id), { type: 'json' });
@@ -299,7 +301,7 @@ exports.handler = async (event) => {
     }
 
     if (action === 'roomList') {
-      if (!(await isAdmin())) return json(403, { error: 'admin only' });
+      if (!(await canWrite())) return json(403, { error: 'admin only' });
       const out = [];
       const it = await store.list({ prefix: 'room:' });
       for (const blob of (it.blobs || [])) {

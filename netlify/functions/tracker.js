@@ -227,6 +227,30 @@ exports.handler = async (event) => {
     const cfg = await store.get('__config', { type: 'json' });
     return !!(cfg && cfg.adminKey && String(b.adminKey || '') === String(cfg.adminKey));
   };
+  // Machine auth for the scheduled Atlas sync — SYNC_TOKEN instead of the admin PIN.
+  const syncAuthed = async () => (await adminAuthed()) || (!!process.env.SYNC_TOKEN && String(b.syncToken || '') === String(process.env.SYNC_TOKEN));
+  // Sync: list clients that need a room populated (with their Atlas-project mapping + linked room).
+  if (action === 'syncClients') {
+    if (!(await syncAuthed())) return json(401, { error: 'auth required' });
+    const { blobs } = await store.list();
+    const rows = [];
+    for (const bl of blobs) {
+      if (bl.key === '__config' || bl.key.includes(':')) continue;
+      const w = await store.get(bl.key, { type: 'json' }); if (!w || w.deleted) continue;
+      const o = w.onboarding || {};
+      rows.push({ wsId: w.id, company: w.company || '', region: o.region || null, atlasProjectId: o.atlasProjectId || null, roomId: w.roomId || null, kickoffAttended: !!o.kickoffAttended, contactName: w.contactName || '' });
+    }
+    return json(200, { ok: true, clients: rows });
+  }
+  // Sync: link a client workspace to a room id (and optionally record the Atlas project mapping).
+  if (action === 'syncLinkRoom') {
+    if (!(await syncAuthed())) return json(401, { error: 'auth required' });
+    const w = await store.get(String(b.wsId || ''), { type: 'json' }); if (!w) return json(404, { error: 'not found' });
+    if (b.roomId) w.roomId = String(b.roomId);
+    if (b.atlasProjectId != null) { w.onboarding = w.onboarding || {}; w.onboarding.atlasProjectId = String(b.atlasProjectId).trim() || null; }
+    await store.setJSON(String(b.wsId), w);
+    return json(200, { ok: true, roomId: w.roomId || null });
+  }
   // Bulk wipe of client workspaces (keeps __config, rooms and CVs). Guarded + confirm required.
   if (action === 'adminClearAll') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
@@ -458,7 +482,7 @@ exports.handler = async (event) => {
   // ---- Admin: manage a specific client's candidate shortlist ----
   if (action === 'adminGetClient' || action === 'adminAddCandidate' || action === 'adminUpdateCandidate'
       || action === 'adminRemoveCandidate' || action === 'adminUploadCV' || action === 'adminSetHired' || action === 'adminSaveWorkOrder'
-      || action === 'adminCountersignMSA' || action === 'adminCountersignWO' || action === 'adminLinkRoom' || action === 'adminMarkKickoffAttended') {
+      || action === 'adminCountersignMSA' || action === 'adminCountersignWO' || action === 'adminLinkRoom' || action === 'adminMarkKickoffAttended' || action === 'adminSetAtlasProject') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'client not found' });
     w.onboarding = w.onboarding || {}; if (!Array.isArray(w.onboarding.shortlist)) w.onboarding.shortlist = [];
@@ -468,7 +492,7 @@ exports.handler = async (event) => {
       const o = w.onboarding;
       return json(200, { ok: true, client: {
         id: w.id, company: w.company, region, customerEmail: w.customerEmail || '',
-        clientPin: w.customerPin || '', roomId: w.roomId || null, existingClient: !!o.existingClient,
+        clientPin: w.customerPin || '', roomId: w.roomId || null, atlasProjectId: o.atlasProjectId || null, existingClient: !!o.existingClient,
         // full team-member list with PINs — revealed only once the Work Order is signed
         team: o.woDone ? (w.candidates || []).map(c => ({ id: c.id, name: c.name || 'Team member', candidatePin: c.candidatePin || '' })) : null,
         teamCount: (w.candidates || []).length,
@@ -485,9 +509,29 @@ exports.handler = async (event) => {
       w.roomId = b.roomId ? String(b.roomId) : null;
       await saveW(); return json(200, { ok: true, roomId: w.roomId });
     }
+    if (action === 'adminSetAtlasProject') {
+      w.onboarding.atlasProjectId = String(b.atlasProjectId || '').trim() || null;
+      await saveW(); return json(200, { ok: true, atlasProjectId: w.onboarding.atlasProjectId });
+    }
     if (action === 'adminMarkKickoffAttended') {
       w.onboarding.kickoffAttended = { ts: new Date().toISOString() };
-      await saveW(); return json(200, { ok: true });
+      if (b.atlasProjectId != null) w.onboarding.atlasProjectId = String(b.atlasProjectId).trim() || null;
+      // Auto-create + link the client's collaboration room if they don't have one yet.
+      // The morning Atlas sync then populates THIS room (by its id) with the candidates.
+      if (!w.roomId) {
+        const slug = 'c-' + String(w.id).slice(0, 12);
+        const room = {
+          id: slug, atlasProjectId: w.onboarding.atlasProjectId || null,
+          role: (region ? region + ' — ' : '') + 'Hiring project', region: region || null,
+          client: { name: w.company || 'Client', contactName: w.contactName || '' }, owner: 'Untapped',
+          hub: {}, stages: [['presented', 'Presented'], ['interview', 'Client Interview'], ['second', '2nd Interview'], ['offer', 'Offer'], ['hired', 'Hired']].map(([id, label]) => ({ id, label })),
+          candidates: [], activity: [], chat: [], viewers: {}, createdAt: new Date().toISOString()
+        };
+        await store.setJSON('room:' + slug, room);
+        w.roomId = slug;
+      }
+      await saveW();
+      return json(200, { ok: true, roomId: w.roomId });
     }
     if (action === 'adminSetHired') {
       const c = w.onboarding.shortlist.find(x => x.id === b.candidateId); if (!c) return json(404, { error: 'candidate not found' });
