@@ -1,4 +1,4 @@
-/* Untapped KPI Tracker — cloud API (Netlify Function + Blobs)
+/* Untapped KPI Tracker — cloud API (Netlify Function + Blobs) — rebuild trigger: SYNC_TOKEN
  *
  * Model: a customer WORKSPACE (one client) holds many CANDIDATES.
  *   - Customer PIN  → manage KPIs, see oversight dashboard, leave kudos, view pulse/blockers, add candidates.
