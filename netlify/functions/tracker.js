@@ -676,6 +676,12 @@ exports.handler = async (event) => {
     if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
     ws.onboarding.questionnaireDone = true; ws.onboarding.questionnaireTs = new Date().toISOString();
     obRecompute(); await obSave();
+    // Alert the whole team the moment a client finishes the kick-off questionnaire.
+    const qRegion = ws.onboarding.region;
+    const qBody = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has just completed the pre-kick-off questionnaire.</p>
+      <p style="color:#555;font-size:14px">${esc(ws.contactName || '')}${ws.contactName ? ' · ' : ''}${esc(ws.customerEmail || '')} · ${esc(qRegion || '—')}</p>
+      <p style="color:#777;font-size:13px">Their written answers are captured in the kick-off questionnaire responses. The next step in their journey is booking the kick-off call.</p>`;
+    try { await mail([...TEAM, DELIVERY[qRegion]].filter(Boolean), `Kick-off questionnaire completed — ${ws.company || 'client'}`, emailWrap('Questionnaire completed', qBody, ws, reqBase)); } catch (e) {}
     return json(200, { ok: true, onboarding: obPublic() });
   }
   if (action === 'markBooked') {
