@@ -444,8 +444,8 @@ function obFunnel(step){
     el.innerHTML=`<div class="center"><div class="card" style="max-width:560px;width:100%;text-align:center">
       <div class="heatrule" style="margin:0 auto 14px"></div>${obStepper('workorder')}
       <h1 style="font-size:26px">Kick-off booked ✓</h1>
-      <p class="muted" style="font-size:15px;line-height:1.6">Thanks, ${esc(co)}. Your kick-off call is booked and our team is now preparing your Work Order.</p>
-      <p class="muted" style="font-size:15px;line-height:1.6;margin-top:10px">As soon as it's ready you'll be able to review and sign it right here. We'll also email you the moment it lands.</p>
+      <p class="muted" style="font-size:15px;line-height:1.6">Thanks, ${esc(co)}. We're hard at work finding you the best person for your business.</p>
+      <p class="muted" style="font-size:15px;line-height:1.6;margin-top:10px">Your next steps will appear here as soon as we've identified and hired your new team member. We'll email you the moment they're ready.</p>
       <button class="btn ghost sm" style="margin-top:16px" onclick="App.obRefresh()">Refresh</button>
     </div></div>`;
     clearTimeout(window._obHold); window._obHold=setTimeout(()=>{ if(OB&&!OB.woReady) App.obRefresh(); },20000);
