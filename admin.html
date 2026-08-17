@@ -58,7 +58,7 @@ function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');setT
 async function api(action,extra){const r=await fetch(EP,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,adminKey:KEY,...(extra||{})})});let j={};try{j=await r.json()}catch(e){}if(!r.ok)j.error=j.error||('HTTP '+r.status);return j;}
 function copy(t){navigator.clipboard&&navigator.clipboard.writeText(t);toast('Copied');}
 
-const STAGES={ 'sent':['Awaiting signature','b-sent'], 'paid':['Signed · awaiting payment','b-mid'], 'questionnaire':['Paid · awaiting questionnaire','b-mid'], 'booked':['Awaiting kick-off booking','b-mid'], 'shortlist':['Shortlist stage','b-mid'], 'workorder':['Awaiting Work Order','b-mid'], 'directdebit':['Awaiting Direct Debit','b-mid'], 'active':['Active','b-active'], 'no-onboarding':['No onboarding','b-mid'] };
+const STAGES={ 'sent':['Awaiting signature','b-sent'], 'paid':['Signed · awaiting payment','b-mid'], 'questionnaire':['Paid · awaiting questionnaire','b-mid'], 'booked':['Awaiting kick-off booking','b-mid'], 'holding':['Preparing Work Order','b-mid'], 'workorder':['Awaiting Work Order','b-mid'], 'directdebit':['Awaiting Direct Debit','b-mid'], 'active':['Active','b-active'], 'no-onboarding':['No onboarding','b-mid'] };
 
 async function init(){
   let s=null; try{s=sessionStorage.getItem('untapped_admin_key')}catch(e){}
@@ -96,15 +96,15 @@ let view='clients';
 function console_(){
   $('#topr').innerHTML=`<button class="btn ghost sm" onclick="lock()">Lock</button>`;
   el.innerHTML=`<div class="row" style="justify-content:space-between">
-      <div class="tabs"><button class="tab ${view==='clients'?'on':''}" onclick="go('clients')">Clients</button><button class="tab ${view==='rooms'?'on':''}" onclick="go('rooms')">Rooms</button><button class="tab ${view==='new'?'on':''}" onclick="go('new')">+ New client</button></div>
+      <div class="tabs"><button class="tab ${view==='clients'?'on':''}" onclick="go('clients')">Clients</button><button class="tab ${view==='new'?'on':''}" onclick="go('new')">+ New client</button></div>
     </div><div id="body"></div>`;
-  if(view==='new') newClientForm(); else if(view==='rooms') roomsView(); else clientsView();
+  if(view==='new') newClientForm(); else clientsView();
 }
 function go(v){view=v;console_();}
 function lock(){KEY=null;try{sessionStorage.removeItem('untapped_admin_key')}catch(e){}keyView();$('#topr').innerHTML='';}
 
 function monthKey(iso){const d=new Date(iso);return isNaN(d)?'Unknown':d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});}
-const KCOLS=[['sent','Awaiting signature'],['paid','Awaiting payment'],['questionnaire','Questionnaire'],['booked','Kick-off booking'],['shortlist','Shortlist'],['workorder','Work Order'],['directdebit','Direct Debit'],['active','Active']];
+const KCOLS=[['sent','Awaiting signature'],['paid','Awaiting payment'],['questionnaire','Questionnaire'],['booked','Kick-off booking'],['holding','Preparing WO'],['workorder','Work Order'],['directdebit','Direct Debit'],['active','Active']];
 let clientView_mode='board';
 async function clientsView(){
   const box=$('#body');box.innerHTML='<div class="empty">Loading…</div>';
@@ -265,10 +265,10 @@ async function openClient(id){
   box.innerHTML=`
     <h1 style="font-size:23px;margin:6px 0 2px">${esc(c.company)}</h1>
     <p class="muted" style="font-size:13px">${esc(c.region||'—')} · retainer £${((c.vat?c.retainerPerHire*c.hires*1.2:c.retainerPerHire*c.hires)||0).toFixed(0)} · <a href="${location.origin+'/?w='+c.id}" target="_blank" style="color:#ffb27a">client link ↗</a></p>
-    <div style="margin:12px 0">${step(!!c.signed,'MSA signed')}${step(!!c.paid,'Retainer paid')}${step(!!c.questionnaireDone,'Questionnaire')}${step(!!c.booked,'Kick-off booked')}${step(!!c.hired,'Hired')}${step(!!c.woDone,'Work Order')}${step(!!c.ddDone,'Direct Debit')}</div>
+    <div style="margin:12px 0">${step(!!c.signed,'MSA signed')}${step(!!c.paid,'Retainer paid')}${step(!!c.questionnaireDone,'Questionnaire')}${step(!!c.booked,'Kick-off booked')}${step(!!c.woReady,'WO released')}${step(!!c.woDone,'Work Order signed')}${step(!!c.ddDone,'Direct Debit')}</div>
     ${(c.existingClient||c.signed)?`<div class="month">New hiring project</div>
     <div class="card" id="np_card">
-      <p class="muted" style="font-size:13px;margin:0 0 10px">MSA already in force — start another hiring project for this client. Terms are skipped; the client's link opens at the deposit step, then kick-off questionnaire → call → candidate shortlist.</p>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">MSA already in force — start another hiring project for this client. Terms are skipped; the client's link opens at the deposit step, then kick-off questionnaire → call → Work Order.</p>
       <div class="grid2">
         <div><label class="fl">Project name (optional)</label><input id="np_name" placeholder="e.g. Q3 Support Team"></div>
         <div><label class="fl">Number of roles</label><input id="np_hires" type="number" min="1" step="1" value="1"></div>
@@ -278,8 +278,6 @@ async function openClient(id){
       <button class="btn sm" style="margin-top:10px" onclick="newProject('${c.id}')">Create new hiring project →</button>
       <div id="np_out"></div>
     </div>`:''}
-    <div class="month">Collaboration room</div>
-    <div class="card" id="roomlinkcard">${roomPanelHTML(c)}</div>
     <div class="month">Access PINs</div>
     <div class="card">
       <div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Client PIN</div>
@@ -305,42 +303,39 @@ async function openClient(id){
         ${(c.signed&&c.msaCountersign)?`<button class="btn ghost sm" onclick="printRecord('${c.id}','msa')">Print record</button>`:''}
       </div>
     </div>
-    <div class="month">Candidate shortlist</div>
-    ${cards}
-    ${c.hired?workOrderEditor(c):''}
-    <div class="card" style="margin-top:14px">
-      <b style="font-size:15px">Add a candidate</b>
-      <div class="grid2" style="margin-top:10px">
-        <div><label class="fl">Name</label><input id="nc_name" placeholder="Candidate name"></div>
-        <div><label class="fl">Salary (£/mo)</label><input id="nc_sal" type="number" min="0" step="50" value="0"></div>
-      </div>
-      <label class="fl">Commentary (the pill the client sees)</label><input id="nc_comm" placeholder="e.g. 6 yrs SaaS support, immediate start">
-      <div class="err" id="nc_err"></div>
-      <button class="btn sm" style="margin-top:6px" onclick="addCand('${c.id}')">Add candidate</button>
-      <p class="muted" style="font-size:12px;margin-top:6px">Add the candidate, then use “Upload CV” on their card to attach the profile PDF.</p>
-    </div>`;
+    ${workOrderEditor(c)}`;
 }
 function workOrderEditor(c){
-  const wo=c.workOrder||{}; const cl=wo.client||{};
-  return `<div class="month">Work Order — ${esc((c.hired&&c.hired.name)||'the hire')}</div>
+  const wo=c.workOrder||{}; const cl=wo.client||{}; const released=!!c.woReady;
+  return `<div class="month">Work Order</div>
     <div class="card">
-      <p class="muted" style="font-size:13px;margin:0 0 10px">Fill in the hire details below. The client sees these (read-only) in their funnel, adds their own company details, and signs.</p>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">Prepare the hire's details, then <b style="color:#fff">release</b> the Work Order to the client. Until you release it, the client sees a holding page after booking their kick-off. The client then reviews these details (read-only), adds their company details, and signs.</p>
       <div class="grid2">
+        <div><label class="fl">Employee name</label><input id="wo_en" value="${esc(wo.employeeName||'')}" placeholder="The hire's full name"></div>
         <div><label class="fl">Job title</label><input id="wo_jt" value="${esc(wo.jobTitle||'')}"></div>
+      </div>
+      <div class="grid2">
         <div><label class="fl">Start date</label><input id="wo_sd" value="${esc(wo.startDate||'')}" placeholder="e.g. 1 Aug 2026"></div>
-      </div>
-      <div class="grid2">
         <div><label class="fl">Gross salary (£/mo)</label><input id="wo_gs" type="number" min="0" step="50" value="${Number(wo.grossSalaryMonthly)||0}"></div>
-        <div><label class="fl">Notice period</label><input id="wo_np" value="${esc(wo.noticePeriod||'1 Calendar Month')}"></div>
       </div>
       <div class="grid2">
+        <div><label class="fl">Notice period</label><input id="wo_np" value="${esc(wo.noticePeriod||'1 Calendar Month')}"></div>
         <div><label class="fl">Annual leave (days)</label><input id="wo_al" type="number" min="0" value="${wo.annualLeaveDays!=null?wo.annualLeaveDays:15}"></div>
-        <div><label class="fl">Sick leave (days)</label><input id="wo_sl" type="number" min="0" value="${wo.sickLeaveDays!=null?wo.sickLeaveDays:12}"></div>
       </div>
-      <label class="fl">Job description</label><textarea id="wo_jd" style="width:100%;min-height:70px;background:#0d0f14;border:1px solid var(--line);border-radius:9px;color:#fff;padding:10px">${esc(wo.jobDescription||'')}</textarea>
+      <div class="grid2">
+        <div><label class="fl">Sick leave (days)</label><input id="wo_sl" type="number" min="0" value="${wo.sickLeaveDays!=null?wo.sickLeaveDays:12}"></div>
+        <div></div>
+      </div>
+      <label class="fl">Job description</label><textarea id="wo_jd" style="width:100%;min-height:70px;background:#000;border:1px solid var(--line);border-radius:9px;color:#fff;padding:10px">${esc(wo.jobDescription||'')}</textarea>
       <label class="fl">Commission / bonus details (optional)</label><input id="wo_cd" value="${esc(wo.commissionDetails||'')}">
-      <button class="btn sm" style="margin-top:10px" onclick="saveWO('${c.id}')">Save Work Order details</button>
-      ${wo.signed?`<div class="card" style="margin-top:12px;background:#0d0f14"><b style="font-size:14px;color:#7ee2a0">✓ Signed by the client</b>
+      <div class="row" style="margin-top:10px;gap:8px;align-items:center">
+        <button class="btn ghost sm" onclick="saveWO('${c.id}')">Save details</button>
+        ${released
+          ? `<span class="badge b-active">✓ Released to client</span>`
+          : `<button class="btn sm" onclick="releaseWO('${c.id}')">Release Work Order to client →</button>`}
+      </div>
+      ${released?`<div class="muted" style="font-size:12px;margin-top:6px">Released ${new Date(c.woReady.ts).toLocaleString('en-GB')} — the client can now review and sign it. Save again to update the details they see.</div>`:`<div class="muted" style="font-size:12px;margin-top:6px">Save the details (employee name required), then release when you're ready for the client to sign.</div>`}
+      ${wo.signed?`<div class="card" style="margin-top:12px;background:#000"><b style="font-size:14px;color:#7ee2a0">✓ Signed by the client</b>
         <div class="muted" style="font-size:13px;margin-top:6px">Signed by ${esc(wo.signed.name)} · ${new Date(wo.signed.ts).toLocaleString('en-GB')}</div>
         <div class="muted" style="font-size:13px;margin-top:6px">${esc(cl.companyName||'')} · Reg ${esc(cl.companyRegNumber||'')}<br>${esc(cl.companyAddress||'')}<br>Contact: ${esc(cl.contactName||'')} · ${esc(cl.hiringManagerEmail||'')}<br>Accounts: ${esc(cl.accountsEmail||'')}</div>
         <div class="muted" style="font-size:13px;margin-top:8px">Untapped: ${wo.untappedSigned?`${esc(wo.untappedSigned.name)} (${esc(wo.untappedSigned.title)}) · ${new Date(wo.untappedSigned.ts).toLocaleString('en-GB')}`:'not counter-signed'}</div>
@@ -406,7 +401,8 @@ function printRecord(id,kind){
   w.document.close();
 }
 async function setHired(id,cid){if(!confirm('Mark this candidate as hired? This moves the client to the Work Order stage.'))return;const j=await api('adminSetHired',{wsId:id,candidateId:cid});if(j.ok){toast('Marked as hired');openClient(id);}else toast(j.error||'Failed');}
-async function saveWO(id){const wo={jobTitle:$('#wo_jt').value,startDate:$('#wo_sd').value,grossSalaryMonthly:$('#wo_gs').value,noticePeriod:$('#wo_np').value,annualLeaveDays:$('#wo_al').value,sickLeaveDays:$('#wo_sl').value,jobDescription:$('#wo_jd').value,commissionDetails:$('#wo_cd').value};const j=await api('adminSaveWorkOrder',{wsId:id,wo});if(j.ok){toast('Work Order saved');openClient(id);}else toast(j.error||'Failed');}
+async function saveWO(id){const wo={employeeName:$('#wo_en').value,jobTitle:$('#wo_jt').value,startDate:$('#wo_sd').value,grossSalaryMonthly:$('#wo_gs').value,noticePeriod:$('#wo_np').value,annualLeaveDays:$('#wo_al').value,sickLeaveDays:$('#wo_sl').value,jobDescription:$('#wo_jd').value,commissionDetails:$('#wo_cd').value};const j=await api('adminSaveWorkOrder',{wsId:id,wo});if(j.ok){toast('Work Order saved');openClient(id);}else toast(j.error||'Failed');}
+async function releaseWO(id){const g=x=>{const e=document.getElementById(x);return e?e.value:'';};const en=g('wo_en').trim();if(!en){toast('Add the employee name first');return;}if(!confirm('Release this Work Order to the client? They will be able to review and sign it, and it lifts their holding page.'))return;const wo={employeeName:en,jobTitle:g('wo_jt'),startDate:g('wo_sd'),grossSalaryMonthly:g('wo_gs'),noticePeriod:g('wo_np'),annualLeaveDays:g('wo_al'),sickLeaveDays:g('wo_sl'),jobDescription:g('wo_jd'),commissionDetails:g('wo_cd')};const s=await api('adminSaveWorkOrder',{wsId:id,wo});if(!s.ok){toast(s.error||'Save failed');return;}const j=await api('adminReleaseWO',{wsId:id});if(j.ok){toast('Work Order released to client');openClient(id);}else toast(j.error||'Failed');}
 async function addCand(id){const name=$('#nc_name').value.trim(),salary=$('#nc_sal').value,commentary=$('#nc_comm').value.trim();if(!name){$('#nc_err').textContent='Enter a name.';return;}const j=await api('adminAddCandidate',{wsId:id,name,salary,commentary});if(j.ok){toast('Candidate added');openClient(id);}else $('#nc_err').textContent=j.error||'Failed';}
 async function saveSalary(id,cid){const salary=$('#sal_'+cid).value;const j=await api('adminUpdateCandidate',{wsId:id,candidateId:cid,salary});if(j.ok){toast('Salary saved');openClient(id);}else toast(j.error||'Failed');}
 async function removeCand(id,cid){if(!confirm('Remove this candidate from the shortlist?'))return;const j=await api('adminRemoveCandidate',{wsId:id,candidateId:cid});if(j.ok){toast('Removed');openClient(id);}else toast(j.error||'Failed');}
