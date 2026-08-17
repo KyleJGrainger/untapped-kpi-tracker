@@ -16,7 +16,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const TEAM = ['kyle@tryuntapped.com', 'Nina@tryuntapped.com', 'pau@tryuntapped.com'];
 const VA = 'pau@tryuntapped.com';
 const DELIVERY = { 'South Africa': 'Ruan.Stander@tryuntapped.com', 'Philippines': 'Diana@tryuntapped.com' };
-const KICKOFF = { 'South Africa': 'https://my.recruitwithatlas.com/tryuntappedcom/Ruan-Stander/Kickoff-Call', 'Philippines': 'https://my.recruitwithatlas.com/tryuntappedcom/Diana-Rose-Ariaso/Kickoff-Call' };
+const KICKOFF = { 'South Africa': 'https://my.recruitwithatlas.com/tryuntappedcom/Ruan-Stander/Kickoff-Call-untapped', 'Philippines': 'https://my.recruitwithatlas.com/tryuntappedcom/Diana-Rose-Ariaso/Kickoff-Call' };
 // Cost engine: total monthly £ the client sees = salary + service charge % + fixed EOR/payroll fee
 // + statutory/compliance charges (UIF 1% + SDL 1% + ESC 1% + FCE 2% = 5% of gross). Matches the Work Order.
 const STAT_CHARGES = [
@@ -204,8 +204,8 @@ exports.handler = async (event) => {
     o = o || {};
     if (o.ddDone) return 'active';
     if (o.woDone) return 'directdebit';
-    if (o.hired) return 'workorder';
-    if (o.booked) return 'shortlist';
+    if (o.woReady) return 'workorder';
+    if (o.booked) return 'holding';
     if (o.questionnaireDone) return 'booked';
     if (o.paid) return 'questionnaire';
     if (o.signed) return 'paid';
@@ -481,7 +481,7 @@ exports.handler = async (event) => {
   }
   // ---- Admin: manage a specific client's candidate shortlist ----
   if (action === 'adminGetClient' || action === 'adminAddCandidate' || action === 'adminUpdateCandidate'
-      || action === 'adminRemoveCandidate' || action === 'adminUploadCV' || action === 'adminSetHired' || action === 'adminSaveWorkOrder'
+      || action === 'adminRemoveCandidate' || action === 'adminUploadCV' || action === 'adminSetHired' || action === 'adminSaveWorkOrder' || action === 'adminReleaseWO'
       || action === 'adminCountersignMSA' || action === 'adminCountersignWO' || action === 'adminLinkRoom' || action === 'adminMarkKickoffAttended' || action === 'adminSetAtlasProject') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'client not found' });
@@ -498,7 +498,7 @@ exports.handler = async (event) => {
         teamCount: (w.candidates || []).length,
         retainerPerHire: o.retainerPerHire, hires: o.hires, vat: !!o.vat,
         signed: o.signed || null, paid: o.paid || null, questionnaireDone: !!o.questionnaireDone,
-        booked: o.booked || null, kickoffAttended: o.kickoffAttended || null, hired: o.hired || null, woDone: o.woDone || null, ddDone: o.ddDone || null,
+        booked: o.booked || null, kickoffAttended: o.kickoffAttended || null, hired: o.hired || null, woReady: o.woReady || null, woDone: o.woDone || null, ddDone: o.ddDone || null,
         msaCountersign: o.msaCountersign || null, workOrder: o.workOrder || null,
         shortlist: (o.shortlist || []).map(c => { const k = costOf(c.salary, region); return {
           id: c.id, name: c.name, commentary: c.commentary || '', salary: Number(c.salary) || 0, hasCV: !!c.hasCV,
@@ -551,6 +551,15 @@ exports.handler = async (event) => {
       if (f.annualLeaveDays != null) wo.annualLeaveDays = Math.max(0, Number(f.annualLeaveDays) || 0);
       if (f.sickLeaveDays != null) wo.sickLeaveDays = Math.max(0, Number(f.sickLeaveDays) || 0);
       await saveW(); return json(200, { ok: true });
+    }
+    if (action === 'adminReleaseWO') {
+      const wo = w.onboarding.workOrder;
+      if (!wo || !wo.employeeName) return json(400, { error: 'save the Work Order details (including the employee name) first' });
+      w.onboarding.woReady = { ts: new Date().toISOString() };
+      await saveW();
+      // Let the client know their Work Order is ready to sign — lifts their holding page.
+      try { await mail([w.customerEmail].filter(Boolean), `Your Work Order is ready — ${w.company || ''}`.trim(), emailWrap('Your Work Order is ready', `<p style="font-size:15px;color:#333">Good news${w.company ? ` for <b>${esc(w.company)}</b>` : ''} — your Work Order is ready to review and sign. Open your Untapped link to complete it and unlock your dashboard.</p>`, w, reqBase)); } catch (e) {}
+      return json(200, { ok: true });
     }
     if (action === 'adminCountersignMSA') {
       const name = String(b.name || '').trim(); if (name.length < 2) return json(400, { error: 'enter your name' });
@@ -612,7 +621,8 @@ exports.handler = async (event) => {
     if (o.region === undefined) o.region = null; // 'Philippines' | 'South Africa'
     if (o.vat == null) o.vat = false; // add 20% VAT
     if (o.booked === undefined) o.booked = null;   // kick-off call booked
-    if (o.hired === undefined) o.hired = null;     // client hired a candidate
+    if (o.hired === undefined) o.hired = null;     // (legacy) client hired a candidate
+    if (o.woReady === undefined) o.woReady = null; // admin has released the Work Order to the client
     if (o.woDone === undefined) o.woDone = null;   // Work Order complete
     if (o.ddDone === undefined) o.ddDone = null;   // Direct Debit set up
     if (!Array.isArray(o.shortlist)) o.shortlist = []; // presented candidates
@@ -629,7 +639,7 @@ exports.handler = async (event) => {
     status: ws.onboarding.status || 'pending', company: ws.company || '',
     roomId: ws.roomId || null, selfServe: !!ws.onboarding.selfServe,
     signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone,
-    booked: !!ws.onboarding.booked, hired: !!ws.onboarding.hired, woDone: !!ws.onboarding.woDone, ddDone: !!ws.onboarding.ddDone,
+    booked: !!ws.onboarding.booked, hired: !!ws.onboarding.hired, woReady: !!ws.onboarding.woReady, woDone: !!ws.onboarding.woDone, ddDone: !!ws.onboarding.ddDone,
     hiredName: (ws.onboarding.hired || {}).name || '',
     signedCompany: (ws.onboarding.signed || {}).company || null,
     // Work Order — the Untapped-filled parts the client reviews before adding their own details + signing
@@ -651,7 +661,7 @@ exports.handler = async (event) => {
   });
   const obRecompute = () => {
     const o = ws.onboarding;
-    o.status = o.ddDone ? 'complete' : o.woDone ? 'directdebit' : o.hired ? 'workorder' : o.booked ? 'shortlist'
+    o.status = o.ddDone ? 'complete' : o.woDone ? 'directdebit' : o.woReady ? 'workorder' : o.booked ? 'holding'
       : o.questionnaireDone ? 'booked' : o.paid ? 'questionnaire' : o.signed ? 'paid' : 'pending';
   };
   if (action === 'onboardingStatus') {
@@ -725,7 +735,13 @@ exports.handler = async (event) => {
     const qBody = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has just completed the pre-kick-off questionnaire.</p>
       <p style="color:#555;font-size:14px">${esc(ws.contactName || '')}${ws.contactName ? ' · ' : ''}${esc(ws.customerEmail || '')} · ${esc(qRegion || '—')}</p>
       <p style="color:#777;font-size:13px">Their written answers are captured in the kick-off questionnaire responses. The next step in their journey is booking the kick-off call.</p>`;
-    try { await mail([...TEAM, DELIVERY[qRegion]].filter(Boolean), `Kick-off questionnaire completed — ${ws.company || 'client'}`, emailWrap('Questionnaire completed', qBody, ws, reqBase)); } catch (e) {}
+    // Send to the core team and the region delivery lead SEPARATELY. A single bad
+    // recipient address (e.g. a region lead) makes the whole batch fail, which is why
+    // PH notifications were silently going missing — split sends isolate that failure.
+    const qSubject = `Kick-off questionnaire completed — ${ws.company || 'client'}`;
+    const qHtml = emailWrap('Questionnaire completed', qBody, ws, reqBase);
+    try { await mail(TEAM, qSubject, qHtml); } catch (e) {}
+    if (DELIVERY[qRegion]) { try { await mail([DELIVERY[qRegion]], qSubject, qHtml); } catch (e) {} }
     return json(200, { ok: true, onboarding: obPublic() });
   }
   if (action === 'markBooked') {
@@ -734,8 +750,11 @@ exports.handler = async (event) => {
     ws.onboarding.booked = { ts: new Date().toISOString() };
     obRecompute(); await obSave();
     const region = ws.onboarding.region;
-    const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has booked their kick-off call.</p><p style="color:#777;font-size:13px">Region: ${esc(region || '—')}. Time to prepare their candidate shortlist.</p>`;
-    await mail([...TEAM, DELIVERY[region]].filter(Boolean), `Kick-off booked — ${ws.company || 'client'}`, emailWrap('Kick-off call booked', body, ws, reqBase));
+    const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has booked their kick-off call.</p><p style="color:#777;font-size:13px">Region: ${esc(region || '—')}. Time to prepare and release their Work Order.</p>`;
+    const bSubject = `Kick-off booked — ${ws.company || 'client'}`;
+    const bHtml = emailWrap('Kick-off call booked', body, ws, reqBase);
+    try { await mail(TEAM, bSubject, bHtml); } catch (e) {}
+    if (DELIVERY[region]) { try { await mail([DELIVERY[region]], bSubject, bHtml); } catch (e) {} }
     return json(200, { ok: true, onboarding: obPublic() });
   }
   if (action === 'shortlistAction') {
@@ -765,7 +784,7 @@ exports.handler = async (event) => {
   }
   if (action === 'submitWorkOrder') {
     if (!ws.onboarding.required) return json(400, { error: 'onboarding not enabled' });
-    if (!ws.onboarding.hired) return json(400, { error: 'not at Work Order stage yet' });
+    if (!ws.onboarding.woReady) return json(400, { error: 'your Work Order is not ready yet' });
     const name = String(b.name || '').trim(); if (name.length < 2) return json(400, { error: 'enter your full name' });
     const cf = b.client || {};
     const wo = ws.onboarding.workOrder = ws.onboarding.workOrder || { client: {}, signed: null };
