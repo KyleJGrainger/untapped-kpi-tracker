@@ -798,7 +798,11 @@ exports.handler = async (event) => {
     ws.onboarding.woDone = { ts: new Date().toISOString() };
     obRecompute(); await obSave();
     const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has completed &amp; signed their Work Order for <b>${esc(wo.employeeName || 'the hire')}</b>.</p><p style="color:#777;font-size:13px">Signed by ${esc(name)}. Next step for them: Direct Debit.</p>`;
-    await mail([...TEAM, DELIVERY[ws.onboarding.region]].filter(Boolean), `Work Order signed — ${ws.company || 'client'}`, emailWrap('Work Order signed', body, ws, reqBase));
+    const woSubject = `Work Order signed — ${ws.company || 'client'}`;
+    const woHtml = emailWrap('Work Order signed', body, ws, reqBase);
+    // Split sends: the core team (Kyle/Nina/Pau) is guaranteed to be notified even if a region lead address is bad.
+    try { await mail(TEAM, woSubject, woHtml); } catch (e) {}
+    if (DELIVERY[ws.onboarding.region]) { try { await mail([DELIVERY[ws.onboarding.region]], woSubject, woHtml); } catch (e) {} }
     return json(200, { ok: true, onboarding: obPublic() });
   }
   if (action === 'markDD') {
@@ -807,7 +811,10 @@ exports.handler = async (event) => {
     ws.onboarding.ddDone = { ts: new Date().toISOString() };
     obRecompute(); await obSave();
     const body = `<p style="font-size:15px;color:#333"><b>${esc(ws.company || 'A client')}</b> has set up their Direct Debit — <b>onboarding complete</b>. Their dashboard is now unlocked.</p>`;
-    await mail([...TEAM, DELIVERY[ws.onboarding.region]].filter(Boolean), `Onboarding complete — ${ws.company || 'client'}`, emailWrap('Onboarding complete', body, ws, reqBase));
+    const ddSubject = `Onboarding complete — ${ws.company || 'client'}`;
+    const ddHtml = emailWrap('Onboarding complete', body, ws, reqBase);
+    try { await mail(TEAM, ddSubject, ddHtml); } catch (e) {}
+    if (DELIVERY[ws.onboarding.region]) { try { await mail([DELIVERY[ws.onboarding.region]], ddSubject, ddHtml); } catch (e) {} }
     return json(200, { ok: true, onboarding: obPublic() });
   }
 
