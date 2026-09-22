@@ -195,6 +195,9 @@ async function init(){
 }
 function obStepFor(o){ if(!o.signed) return 'welcome'; if(!o.paid) return 'pay'; if(!o.questionnaireDone) return 'quiz'; if(!o.booked) return 'book'; if(!o.woReady) return 'holding'; if(!o.woDone) return 'workorder'; if(!o.ddDone) return 'directdebit'; return 'done'; }
 const GOCARDLESS_URL='https://pay.gocardless.com/billing/static/collect-customer-details?id=BRF01KWZ1XZKSK09YMMDN98Y86KWQ5F2&initial=%2Fcollect-customer-details';
+// TEMP: payment step paused while Stripe is being fixed. After a client signs their terms
+// they see a holding page instead of the (currently broken) pay page. Set back to false to restore payments.
+const PAYMENTS_PAUSED=true;
 function route(){
   try{ if(wsId) history.replaceState(null,'',location.pathname+'?w='+wsId); }catch(e){} // keep recoverable link in the address bar
   const roleLabel=role==='admin'?'Untapped admin':role==='customer'?'Customer':'Candidate';
@@ -412,6 +415,15 @@ function obFunnel(step){
     </div></div>`; return;
   }
   if(step==='pay'){
+    if(PAYMENTS_PAUSED){
+      el.innerHTML=`<div class="center"><div class="card" style="max-width:560px;width:100%;text-align:center">
+        <div class="heatrule" style="margin:0 auto 16px"></div>
+        <h1 style="font-size:26px">Terms signed. Thank you ✓</h1>
+        <p class="muted" style="font-size:15px;line-height:1.6">We're making a few upgrades to the next step of your onboarding right now.</p>
+        <p class="muted" style="font-size:15px;line-height:1.6;margin-top:10px">There's nothing more you need to do. Our team will be in touch very shortly to get you started.</p>
+        ${obStaffLink()}
+      </div></div>`; return;
+    }
     el.innerHTML=`<div class="center"><div class="card" style="max-width:520px;width:100%;text-align:center">
       <div class="heatrule" style="margin:0 auto"></div>${obStepper('pay')}
       <h1 style="font-size:24px">Pay your ${OB.selfServe?'deposit':'retainer'}</h1>
