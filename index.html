@@ -197,7 +197,7 @@ function obStepFor(o){ if(!o.signed) return 'welcome'; if(!o.paid) return 'pay';
 const GOCARDLESS_URL='https://pay.gocardless.com/billing/static/collect-customer-details?id=BRF01KWZ1XZKSK09YMMDN98Y86KWQ5F2&initial=%2Fcollect-customer-details';
 // TEMP: payment step paused while Stripe is being fixed. After a client signs their terms
 // they see a holding page instead of the (currently broken) pay page. Set back to false to restore payments.
-const PAYMENTS_PAUSED=true;
+const PAYMENTS_PAUSED=false;
 function route(){
   try{ if(wsId) history.replaceState(null,'',location.pathname+'?w='+wsId); }catch(e){} // keep recoverable link in the address bar
   const roleLabel=role==='admin'?'Untapped admin':role==='customer'?'Customer':'Candidate';
