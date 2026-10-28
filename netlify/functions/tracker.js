@@ -482,7 +482,7 @@ exports.handler = async (event) => {
   // ---- Admin: manage a specific client's candidate shortlist ----
   if (action === 'adminGetClient' || action === 'adminAddCandidate' || action === 'adminUpdateCandidate'
       || action === 'adminRemoveCandidate' || action === 'adminUploadCV' || action === 'adminSetHired' || action === 'adminSaveWorkOrder' || action === 'adminReleaseWO'
-      || action === 'adminCountersignMSA' || action === 'adminCountersignWO' || action === 'adminLinkRoom' || action === 'adminMarkKickoffAttended' || action === 'adminSetAtlasProject') {
+      || action === 'adminCountersignMSA' || action === 'adminCountersignWO' || action === 'adminLinkRoom' || action === 'adminMarkKickoffAttended' || action === 'adminSetAtlasProject' || action === 'adminSetSubmissionUrl') {
     if (!(await adminAuthed())) return json(401, { error: 'admin auth required' });
     const w = await store.get(b.wsId, { type: 'json' }); if (!w) return json(404, { error: 'client not found' });
     w.onboarding = w.onboarding || {}; if (!Array.isArray(w.onboarding.shortlist)) w.onboarding.shortlist = [];
@@ -499,7 +499,7 @@ exports.handler = async (event) => {
         retainerPerHire: o.retainerPerHire, hires: o.hires, vat: !!o.vat,
         signed: o.signed || null, paid: o.paid || null, questionnaireDone: !!o.questionnaireDone,
         booked: o.booked || null, kickoffAttended: o.kickoffAttended || null, hired: o.hired || null, woReady: o.woReady || null, woDone: o.woDone || null, ddDone: o.ddDone || null,
-        msaCountersign: o.msaCountersign || null, workOrder: o.workOrder || null,
+        msaCountersign: o.msaCountersign || null, workOrder: o.workOrder || null, submissionUrl: o.submissionUrl || '',
         shortlist: (o.shortlist || []).map(c => { const k = costOf(c.salary, region); return {
           id: c.id, name: c.name, commentary: c.commentary || '', salary: Number(c.salary) || 0, hasCV: !!c.hasCV,
           pct: k.pct, fee: k.fee, feeLabel: k.feeLabel, totalCost: k.total, requests: c.requests || [] }; })
@@ -512,6 +512,11 @@ exports.handler = async (event) => {
     if (action === 'adminSetAtlasProject') {
       w.onboarding.atlasProjectId = String(b.atlasProjectId || '').trim() || null;
       await saveW(); return json(200, { ok: true, atlasProjectId: w.onboarding.atlasProjectId });
+    }
+    if (action === 'adminSetSubmissionUrl') {
+      const u = String(b.url || '').trim();
+      w.onboarding.submissionUrl = (u && /^https?:\/\//i.test(u)) ? u : null;
+      await saveW(); return json(200, { ok: true, submissionUrl: w.onboarding.submissionUrl });
     }
     if (action === 'adminMarkKickoffAttended') {
       w.onboarding.kickoffAttended = { ts: new Date().toISOString() };
@@ -637,7 +642,7 @@ exports.handler = async (event) => {
     hires: Number(ws.onboarding.hires) || 1, retainerBase: obBase(), vat: !!ws.onboarding.vat, retainerTotal: obTotal(),
     region: ws.onboarding.region || null, kickoffUrl: KICKOFF[ws.onboarding.region] || '',
     status: ws.onboarding.status || 'pending', company: ws.company || '',
-    roomId: ws.roomId || null, selfServe: !!ws.onboarding.selfServe,
+    roomId: ws.roomId || null, selfServe: !!ws.onboarding.selfServe, submissionUrl: ws.onboarding.submissionUrl || null,
     signed: !!ws.onboarding.signed, paid: !!ws.onboarding.paid, questionnaireDone: !!ws.onboarding.questionnaireDone,
     booked: !!ws.onboarding.booked, hired: !!ws.onboarding.hired, woReady: !!ws.onboarding.woReady, woDone: !!ws.onboarding.woDone, ddDone: !!ws.onboarding.ddDone,
     hiredName: (ws.onboarding.hired || {}).name || '',
