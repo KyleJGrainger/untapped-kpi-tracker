@@ -278,6 +278,12 @@ async function openClient(id){
       <button class="btn sm" style="margin-top:10px" onclick="newProject('${c.id}')">Create new hiring project →</button>
       <div id="np_out"></div>
     </div>`:''}
+    <div class="month">Candidate portal</div>
+    <div class="card">
+      <p class="muted" style="font-size:13px;margin:0 0 10px">Paste a link to this client's candidate submission portal. While they're on the holding page (after booking their kick-off, before the Work Order is released), they'll see a button to open it. Leave blank to hide it.</p>
+      <div class="row" style="gap:6px"><input id="sub_url" value="${esc(c.submissionUrl||'')}" placeholder="https://…" style="flex:1"><button class="btn sm" onclick="saveSubmissionUrl('${c.id}')">Save</button></div>
+      ${c.submissionUrl?`<div class="muted" style="font-size:12px;margin-top:6px">Live on their holding page · <a href="${esc(c.submissionUrl)}" target="_blank" style="color:#ffb27a">open ↗</a></div>`:''}
+    </div>
     <div class="month">Access PINs</div>
     <div class="card">
       <div class="muted" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase">Client PIN</div>
@@ -353,6 +359,7 @@ function roomPanelHTML(c){
   return top+atlas;
 }
 async function saveAtlasProject(id){const v=($('#atlas_pid').value||'').trim();const j=await api('adminSetAtlasProject',{wsId:id,atlasProjectId:v});if(j.ok){toast('Atlas project saved');openClient(id);}else toast(j.error||'Failed');}
+async function saveSubmissionUrl(id){const v=($('#sub_url').value||'').trim();if(v&&!/^https?:\/\//i.test(v)){toast('Link must start with http:// or https://');return;}const j=await api('adminSetSubmissionUrl',{wsId:id,url:v});if(j.ok){toast(v?'Candidate portal link saved':'Link cleared');openClient(id);}else toast(j.error||'Failed');}
 async function markAttended(id){const j=await api('adminMarkKickoffAttended',{wsId:id});if(!j.ok){toast(j.error||'Failed');return;}toast(j.roomId?'Kick-off attended — room created & linked':'Kick-off marked attended');await openClient(id);}
 async function roomPicker(id){
   const card=$('#roomlinkcard');card.innerHTML='<div class="muted" style="font-size:13px">Loading rooms…</div>';

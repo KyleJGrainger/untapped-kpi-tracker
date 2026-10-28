@@ -462,7 +462,7 @@ function obFunnel(step){
       <h1 style="font-size:26px">Kick-off booked ✓</h1>
       <p class="muted" style="font-size:15px;line-height:1.6">Thanks, ${esc(co)}. We're hard at work finding you the best person for your business.</p>
       <p class="muted" style="font-size:15px;line-height:1.6;margin-top:10px">Your next steps will appear here as soon as we've identified and hired your new team member. We'll email you the moment they're ready.</p>
-      <button class="btn ghost sm" style="margin-top:16px" onclick="App.obRefresh()">Refresh</button>
+      ${(OB&&OB.submissionUrl)?`<a class="btn" style="display:inline-block;margin-top:18px;text-decoration:none" href="${esc(OB.submissionUrl)}" target="_blank" rel="noopener">Review your candidate submissions →</a><div style="margin-top:12px"><button class="btn ghost sm" onclick="App.obRefresh()">Refresh</button></div>`:`<button class="btn ghost sm" style="margin-top:16px" onclick="App.obRefresh()">Refresh</button>`}
     </div></div>`;
     clearTimeout(window._obHold); window._obHold=setTimeout(()=>{ if(OB&&!OB.woReady) App.obRefresh(); },20000);
     return;
