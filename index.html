@@ -447,13 +447,13 @@ function obFunnel(step){
   }
   if(step==='book'){
     const bk=(OB&&OB.kickoffUrl)||'';
-    el.innerHTML=`<div class="center" style="align-items:flex-start"><div class="card" style="max-width:900px;width:100%">
-      <div class="heatrule"></div>${obStepper('book')}
+    el.innerHTML=`<div class="center"><div class="card" style="max-width:560px;width:100%;text-align:center">
+      <div class="heatrule" style="margin:0 auto 14px"></div>${obStepper('book')}
       <h1 style="font-size:24px">Book your kick-off call</h1>
-      <p class="muted" style="font-size:14px">Questionnaire received ✓. Please book your kick-off project call below, then confirm. After your call, we'll prepare your Work Order.</p>
-      ${bk?`<div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:12px 0;height:520px;background:#fff"><iframe src="${bk}" style="width:100%;height:100%;border:0" title="Book kick-off call"></iframe></div>`:`<div style="border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0;color:var(--muted);font-size:13px">Booking link will appear here. Please contact Untapped — no region set for your account.</div>`}
-      <button class="btn" style="width:100%;margin-top:8px" onclick="App.obBooked()">I've booked my kick-off call →</button>
-      ${bk?`<p class="muted" style="font-size:12px;margin-top:8px;text-align:center">Booking not loading? <a href="${bk}" target="_blank" rel="noopener" style="color:var(--muted)">Open the booking page ↗</a></p>`:''}
+      <p class="muted" style="font-size:14px">Questionnaire received ✓. Book your kick-off project call, then come back and confirm. After the call, we'll prepare your Work Order.</p>
+      ${bk?`<a class="btn" style="display:inline-block;width:100%;box-sizing:border-box;text-decoration:none;margin-top:14px" href="${bk}" target="_blank" rel="noopener">Book your kick-off call ↗</a>
+      <button class="btn ghost" style="width:100%;margin-top:10px" onclick="App.obBooked()">I've booked my kick-off call →</button>
+      <p class="muted" style="font-size:12px;margin-top:10px">Opens in a new tab. Once you've booked, pop back here and confirm.</p>`:`<div style="border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0;color:var(--muted);font-size:13px">Booking link will appear here. Please contact Untapped — no region set for your account.</div>`}
     </div></div>`; return;
   }
   if(step==='holding'){
