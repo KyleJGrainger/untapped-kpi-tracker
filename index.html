@@ -450,10 +450,9 @@ function obFunnel(step){
     el.innerHTML=`<div class="center"><div class="card" style="max-width:560px;width:100%;text-align:center">
       <div class="heatrule" style="margin:0 auto 14px"></div>${obStepper('book')}
       <h1 style="font-size:24px">Book your kick-off call</h1>
-      <p class="muted" style="font-size:14px">Questionnaire received ✓. Book your kick-off project call, then come back and confirm. After the call, we'll prepare your Work Order.</p>
-      ${bk?`<a class="btn" style="display:inline-block;width:100%;box-sizing:border-box;text-decoration:none;margin-top:14px" href="${bk}" target="_blank" rel="noopener">Book your kick-off call ↗</a>
-      <button class="btn ghost" style="width:100%;margin-top:10px" onclick="App.obBooked()">I've booked my kick-off call →</button>
-      <p class="muted" style="font-size:12px;margin-top:10px">Opens in a new tab. Once you've booked, pop back here and confirm.</p>`:`<div style="border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0;color:var(--muted);font-size:13px">Booking link will appear here. Please contact Untapped — no region set for your account.</div>`}
+      <p class="muted" style="font-size:14px">Questionnaire received ✓. Book your kick-off project call below. The calendar opens in a new tab, and we'll take you through to the next step automatically. After your call, we'll prepare your Work Order.</p>
+      ${bk?`<a class="btn" style="display:inline-block;width:100%;box-sizing:border-box;text-decoration:none;margin-top:14px" href="${bk}" target="_blank" rel="noopener" onclick="App.obBooked()">Book your kick-off call ↗</a>
+      <p class="muted" style="font-size:12px;margin-top:12px">Already booked your call? <a href="#" onclick="App.obBooked();return false" style="color:var(--muted)">Continue →</a></p>`:`<div style="border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0;color:var(--muted);font-size:13px">Booking link will appear here. Please contact Untapped — no region set for your account.</div>`}
     </div></div>`; return;
   }
   if(step==='holding'){
