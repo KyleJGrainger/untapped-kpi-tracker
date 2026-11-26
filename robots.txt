@@ -1,213 +1,122 @@
 # hire.tryuntapped.com
-# The public hiring page, llms.txt, sitemap and logo are open to search engines
-# and answer engines. Client tools, contract templates and APIs are not for indexing.
+# The hiring page is open to search and answer engines.
+# Admin, the collaboration room and the agreements send X-Robots-Tag: noindex
+# and a meta noindex. They are not Disallowed, so Google can recrawl them and drop them.
 # A named crawler group does not inherit the * group, so each group repeats the same rules.
 
 Sitemap: https://hire.tryuntapped.com/sitemap.xml
 
 User-agent: *
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: GPTBot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: OAI-SearchBot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: ChatGPT-User
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: ClaudeBot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: Claude-SearchBot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: Claude-User
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: anthropic-ai
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: PerplexityBot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: Perplexity-User
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: Google-Extended
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: Googlebot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: Bingbot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: Applebot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: Applebot-Extended
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: Amazonbot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: CCBot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: meta-externalagent
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: FacebookBot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: Bytespider
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: cohere-ai
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: DuckAssistBot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
 
 User-agent: YouBot
 Allow: /
-Disallow: /admin.html
-Disallow: /room.html
-Disallow: /msa-philippines.html
-Disallow: /msa-south-africa.html
 Disallow: /api/
 Disallow: /.netlify/
