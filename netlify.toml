@@ -16,3 +16,25 @@
 # Commission reminders — 15th (reminder), 18th (final), 19th (summary to Untapped). 09:00 UTC.
 [functions."commissions"]
   schedule = "0 9 15,18,19 * *"
+
+# Machine-readable files for answer engines. No effect on the rendered pages.
+[[headers]]
+  for = "/llms.txt"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    X-Robots-Tag = "all"
+
+[[headers]]
+  for = "/sitemap.xml"
+  [headers.values]
+    Content-Type = "application/xml; charset=utf-8"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Link = "</llms.txt>; rel=\"describedby\"; type=\"text/plain\", </sitemap.xml>; rel=\"sitemap\""
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Link = "</llms.txt>; rel=\"describedby\"; type=\"text/plain\", </sitemap.xml>; rel=\"sitemap\""
