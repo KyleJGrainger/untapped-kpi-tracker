@@ -38,3 +38,35 @@
   for = "/index.html"
   [headers.values]
     Link = "</llms.txt>; rel=\"describedby\"; type=\"text/plain\", </sitemap.xml>; rel=\"sitemap\""
+
+# Private pages stay reachable (so Google can recrawl them) but must not be indexed.
+# Headers only. No redirects, and the pages themselves are unchanged.
+[[headers]]
+  for = "/admin"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/admin.html"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/room"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/room.html"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/msa-south-africa.html"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/msa-philippines.html"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
